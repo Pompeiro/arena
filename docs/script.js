@@ -1,4 +1,5 @@
-const svg = document.getElementById("arena");
+const svgLayer0 = document.getElementById("layer-1");
+const svgLayer1 = document.getElementById("layer-2");
 
 class Rectangle {
 	constructor(x, y, width, height, color = "#8CA8B8", strokeWidth = 4, strokeColor = "#D6CFC7", element = document.createElementNS("http://www.w3.org/2000/svg", "rect")) {
@@ -26,12 +27,12 @@ class Rectangle {
 			this.element.setAttribute("fill", "#eeeeee");
 		});
 
-		svg.appendChild(this.element);
+		svgLayer1.appendChild(this.element);
 
 	}
 	draw(color = this.color) {
 		this.element.setAttribute("fill", color);
-		svg.appendChild(this.element);
+		svgLayer1.appendChild(this.element);
 	}
 	drawBorder() {
 		this.element.setAttribute("stroke", "#D6CFC7");
@@ -52,17 +53,20 @@ class Circle {
 		this.element.setAttribute("cy", cy);
 		this.element.setAttribute("r", r);
 		this.element.setAttribute("fill", "#eeeeee");
+		this.element.style.opacity = "0.5";
 
 		this.element.addEventListener("mouseover", () => {
+			this.element.style.display = "";
 			this.element.setAttribute("fill", "#C8C4D6");
 			console.log("hover over circle");
 		});
 
 		this.element.addEventListener("mouseout", () => {
-			this.element.setAttribute("fill", "#eeeeee");
+			this.element.style.display = "none";
 		});
 		document.addEventListener("keydown", (k) => {
 			if (k.key == "Shift") {
+				this.element.style.display = "";
 				this.element.setAttribute("fill", "#C8C4D6");
 				console.log("shift keydown");
 			}
@@ -70,16 +74,18 @@ class Circle {
 
 		document.addEventListener("keyup", (k) => {
 			if (k.key == "Shift") {
-				this.element.setAttribute("fill", "#eeeeee");
+
+				this.element.style.display = "none";
+
 
 			}
 		});
-		svg.appendChild(this.element);
+		svgLayer0.appendChild(this.element);
 
 	}
 	draw(color = this.color) {
 		this.element.setAttribute("fill", color);
-		svg.appendChild(this.element);
+		svgLayer0.appendChild(this.element);
 	}
 	drawBorder() {
 		this.element.setAttribute("stroke", "#D6CFC7");

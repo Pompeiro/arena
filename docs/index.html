@@ -16,7 +16,9 @@
       background-color: #eeeeee;
     }
 
-    #arena {
+
+
+    #layer-0 {
       border: 5px;
       border-style: solid;
       border-color: #8CA8B8;
@@ -26,7 +28,11 @@
 
 <body>
   <h1>Arena game</h1>
-  <svg id="arena" width="800" height="600">
+  <svg id="layer-0" width="800" height="600">
+    <svg id="layer-1" width="800" height="600">
+      <svg id="layer-2" width="800" height="600">
+      </svg>
+    </svg>
   </svg>
 </body>
 
