@@ -18,45 +18,34 @@ class Rectangle {
 		this.element.setAttribute("y", y);
 		this.element.setAttribute("width", width);
 		this.element.setAttribute("height", height);
-		this.element.style.display = "none";
 
 		this.element.addEventListener("mouseover", () => {
-
-			this.element.style.display = "";
 			this.element.style.fill = "#8CA8B8";
 			console.log("hover over");
-
-			this.svgLayer.appendChild(this.element);
 		});
 
 		this.element.addEventListener("mouseout", () => {
-
 			this.drawBorder();
-
-
-
 		});
+
 		this.svgLayer.appendChild(this.element);
 	}
 
 	draw(color = this.color) {
-		this.element.style.display = "";
-
 		this.element.style.fill = color;
-
-		this.svgLayer.appendChild(this.element);
 	}
-	drawBorder() {
 
-		this.element.style.display = "";
+	drawBorder() {
 		this.element.style.fill = "none";
 
-		this.element.setAttribute("stroke", "#D6CFC7");
-		this.element.setAttribute("stroke-width", this.strokeWidth);
-
-		this.svgLayer.appendChild(this.element);
-
+		this.element.style.stroke = "#D6CFC7";
+		this.element.style.strokeWidth = this.strokeWidth;
 	}
+
+	clear() {
+		this.element.style.fill = "none";
+	}
+
 
 }
 
@@ -72,54 +61,32 @@ class Circle {
 		this.element.setAttribute("cx", cx);
 		this.element.setAttribute("cy", cy);
 		this.element.setAttribute("r", r);
-		this.element.setAttribute("fill", "#eeeeee");
 
-		this.element.style.display = "none";
-		this.element.addEventListener("mouseover", () => {
-			this.element.style.display = "";
-			this.element.setAttribute("fill", "#C8C4D6");
-			console.log("hover over circle");
-		});
-
-		this.element.addEventListener("mouseout", () => {
-			this.element.style.display = "none";
-		});
 		document.addEventListener("keydown", (k) => {
 			if (k.key == "Shift") {
-				this.element.style.display = "";
-				this.element.setAttribute("fill", "#C8C4D6");
+				this.element.style.fill = "#C8C4D6";
 				console.log("shift keydown");
 			}
 		});
 
 		document.addEventListener("keyup", (k) => {
 			if (k.key == "Shift") {
-
-				this.element.style.display = "none";
-
-
+				this.element.style.fill = "none";
 			}
 		});
-		this.svgLayer.appendChild(this.element);
 
+		this.svgLayer.appendChild(this.element);
 	}
+
 	draw(color = this.color) {
-		this.element.style.display = "";
-
 		this.element.style.fill = color;
-
-		this.svgLayer.appendChild(this.element);
 	}
-	drawBorder() {
 
-		this.element.style.display = "";
+	drawBorder() {
 		this.element.style.fill = "none";
 
-		this.element.setAttribute("stroke", "#D6CFC7");
-		this.element.setAttribute("stroke-width", this.strokeWidth);
-
-		this.svgLayer.appendChild(this.element);
-
+		this.element.style.stroke = "#D6CFC7";
+		this.element.style.strokeWidth = this.strokeWidth;
 	}
 
 }
@@ -129,7 +96,6 @@ class Line {
 	lineWidthByRectangleCount = 3;
 	lineHeightByRectangleCount = gridRowCount;
 	constructor(gridRectangle, svgLayer = svgLayer2, color = "#E6E6FA", strokeWidth = 4, strokeColor = "#D6CFC7", element = document.createElementNS("http://www.w3.org/2000/svg", "rect")) {
-
 		const { x, y, width, height } = gridRectangle
 
 		this.svgLayer = svgLayer;
@@ -148,33 +114,44 @@ class Line {
 		this.element.setAttribute("width", this.width);
 		this.element.setAttribute("height", this.height);
 
-		this.element.setAttribute("fill", color);
-
 		this.element.style.opacity = 0.5;
 
-		this.element.style.display = "none";
-
 		this.svgLayer.appendChild(this.element);
-
 	}
+
 	draw(color = this.color) {
-		this.element.style.display = "";
-
 		this.element.style.fill = color;
-
-		this.svgLayer.appendChild(this.element);
 	}
-	drawBorder() {
 
-		this.element.style.display = "";
+	drawBorder() {
 		this.element.style.fill = "none";
 
-		this.element.setAttribute("stroke", "#D6CFC7");
-		this.element.setAttribute("stroke-width", this.strokeWidth);
-
-		this.svgLayer.appendChild(this.element);
-
+		this.element.style.stroke = "#D6CFC7";
+		this.element.style.strokeWidth = this.strokeWidth;
 	}
+
+}
+
+
+class Minion {
+	constructor(row, column, direction = -1, color = "#C1B7A4") {
+		this.row = row;
+		this.column = column;
+		this.color = color;
+		this.direction = direction;
+	}
+
+	draw(color = this.color) {
+		grid[this.row][this.column].draw(color);
+	}
+
+	move() {
+		grid[this.row][this.column].clear();
+		this.row = this.row + this.direction;
+		this.draw();
+		console.log("Moved");
+	}
+
 
 }
 
@@ -183,7 +160,6 @@ const arenaHeight = 600;
 const gridRowCount = 8;
 const gridColCount = 12;
 const grid = [];
-const gridRows = [];
 const gridRectangleWidth = arenaWidth / gridColCount;
 console.log({ gridRectangleWidth })
 const gridRectangleHeight = arenaHeight / gridRowCount;
@@ -236,9 +212,42 @@ tower2Circle.draw()
 
 
 for (let line of lines) {
-
 	line.draw()
 }
+const minion1 = new Minion(row = grid.length - 1, column = 0);
+const minion2 = new Minion(row = grid.length - 1, column = 1);
+const minion3 = new Minion(row = grid.length - 1, column = 2);
+
+const minion4 = new Minion(row = 0, column = 0, direction = 1);
+const minion5 = new Minion(row = 0, column = 1, direction = 1);
+const minion6 = new Minion(row = 0, column = 2, direction = 1);
+minion1.draw()
+minion2.draw()
+minion3.draw()
+
+minion4.draw()
+minion5.draw()
+minion6.draw()
+
+async function gameLoop() {
+	while (true) {
+		await new Promise(r => setTimeout(r, 500));
+		minion1.move()
+		minion2.move()
+		minion3.move()
+
+		minion4.move()
+		minion5.move()
+		minion6.move()
+		if (minion1.row == 0) {
+			break;
+		}
+	}
+}
+
+gameLoop();
+
+
 
 const svgLayer10 = document.getElementById("layer-10");
 const svgLayer11 = document.getElementById("layer-11");
@@ -259,28 +268,18 @@ class Rectangle1 {
 		this.element.setAttribute("y", y);
 		this.element.setAttribute("width", width);
 		this.element.setAttribute("height", height);
-		this.element.style.display = "none";
 
 		this.svgLayer.appendChild(this.element);
-
 	}
+
 	draw(color = this.color) {
-		this.element.style.display = "";
-
 		this.element.style.fill = color;
-
-		this.svgLayer.appendChild(this.element);
 	}
+
 	drawBorder() {
-
-		this.element.style.display = "";
 		this.element.style.fill = "none";
-
-		this.element.setAttribute("stroke", "#bbbbbb");
-		this.element.setAttribute("stroke-width", this.strokeWidth);
-
-		this.svgLayer.appendChild(this.element);
-
+		this.element.style.stroke = "#bbbbbb";
+		this.element.style.strokeWidth = this.strokeWidth;
 	}
 
 }
