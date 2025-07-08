@@ -134,24 +134,24 @@ class Line {
 
 
 class Minion {
+	previousRow = 0;
 	constructor(row, column, direction = -1, color = "#C1B7A4") {
 		this.row = row;
+		this.previousRow = row;
 		this.column = column;
 		this.color = color;
 		this.direction = direction;
 	}
 
-	draw(color = this.color) {
+	updateRow() {
+		this.previousRow = this.row;
+		this.row = this.row + this.direction;
+	}
+
+	render(color = this.color) {
+		grid[this.previousRow][this.column].clear();
 		grid[this.row][this.column].draw(color);
 	}
-
-	move() {
-		grid[this.row][this.column].clear();
-		this.row = this.row + this.direction;
-		this.draw();
-		console.log("Moved");
-	}
-
 
 }
 
@@ -221,33 +221,61 @@ const minion3 = new Minion(row = grid.length - 1, column = 2);
 const minion4 = new Minion(row = 0, column = 0, direction = 1);
 const minion5 = new Minion(row = 0, column = 1, direction = 1);
 const minion6 = new Minion(row = 0, column = 2, direction = 1);
-minion1.draw()
-minion2.draw()
-minion3.draw()
+minion1.render();
+minion2.render();
+minion3.render();
 
-minion4.draw()
-minion5.draw()
-minion6.draw()
+minion4.render();
+minion5.render();
+minion6.render();
+var keysPressed = [];
+function processInput() {
+	console.table(keysPressed);
+}
 
-async function gameLoop() {
-	while (true) {
-		await new Promise(r => setTimeout(r, 500));
-		minion1.move()
-		minion2.move()
-		minion3.move()
+function updateState() {
+	let updateMinions = keysPressed.filter((key) => key == "a");
+	if (updateMinions.length > 0) {
+		minion1.updateRow();
+		minion2.updateRow();
+		minion3.updateRow();
 
-		minion4.move()
-		minion5.move()
-		minion6.move()
-		if (minion1.row == 0) {
-			break;
-		}
+		minion4.updateRow();
+		minion5.updateRow();
+		minion6.updateRow();
 	}
 }
 
-gameLoop();
+function render() {
+	minion1.render();
+	minion2.render();
+	minion3.render();
 
+	minion4.render();
+	minion5.render();
+	minion6.render();
 
+}
+function gameLoop() {
+	processInput();
+	updateState();
+	render();
+}
+
+const help = document.getElementById("help");
+const helpBase = "Press ctrl to trigger game loop, a to move"
+help.textContent = `${helpBase}list of keys pressed: ${keysPressed}`
+document.addEventListener("keydown", (k) => {
+	if (k.key == "Control") {
+		gameLoop();
+		keysPressed = [];
+		help.textContent = `${helpBase} list of keys pressed: ${keysPressed}`
+	}
+	else {
+		keysPressed.push(k.key);
+		help.textContent = `${helpBase} list of keys pressed: ${keysPressed}`
+	}
+});
 
 const svgLayer10 = document.getElementById("layer-10");
 const svgLayer11 = document.getElementById("layer-11");
