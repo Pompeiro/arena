@@ -95,6 +95,7 @@ class Circle {
 class Line {
 	lineWidthByRectangleCount = 3;
 	lineHeightByRectangleCount = gridRowCount;
+	minions = [];
 	constructor(gridRectangle, svgLayer = svgLayer2, color = "#E6E6FA", strokeWidth = 4, strokeColor = "#D6CFC7", element = document.createElementNS("http://www.w3.org/2000/svg", "rect")) {
 		const { x, y, width, height } = gridRectangle
 
@@ -132,10 +133,18 @@ class Line {
 
 }
 
+class Stats {
+	constructor(hp, attack) {
+		this.hp = hp;
+		this.attack = attack;
+	}
+}
 
 class Minion {
 	previousRow = 0;
-	constructor(row, column, direction = -1, color = "#C1B7A4") {
+	isFightMode = false;
+	stats = new Stats(100, 25);
+	constructor(row, column, direction = -1, color = "#B0C4DE") {
 		this.row = row;
 		this.previousRow = row;
 		this.column = column;
@@ -143,15 +152,40 @@ class Minion {
 		this.direction = direction;
 	}
 
-	updateRow() {
+	move() {
 		this.previousRow = this.row;
 		this.row = this.row + this.direction;
 	}
 
+	absorbAttack(attack) {
+		this.stats.hp = this.stats.hp - attack;
+		console.log("Minion absorbed attack", { attack });
+		if (this.stats.hp <= 0) {
+			this.stats.attack = 0;
+			this.clear();
+		}
+	}
+
+	updateState(attack = 0) {
+		if (this.isFightMode == true) {
+			this.absorbAttack(attack);
+		}
+		else {
+			this.move();
+		}
+	}
+
 	render(color = this.color) {
+		if (this.isFightMode == true) {
+			return null;
+		}
 		grid[this.previousRow][this.column].clear();
 		grid[this.row][this.column].draw(color);
 	}
+	clear() {
+		grid[this.row][this.column].clear();
+	}
+
 
 }
 
@@ -218,42 +252,47 @@ const minion1 = new Minion(row = grid.length - 1, column = 0);
 const minion2 = new Minion(row = grid.length - 1, column = 1);
 const minion3 = new Minion(row = grid.length - 1, column = 2);
 
-const minion4 = new Minion(row = 0, column = 0, direction = 1);
-const minion5 = new Minion(row = 0, column = 1, direction = 1);
-const minion6 = new Minion(row = 0, column = 2, direction = 1);
-minion1.render();
-minion2.render();
-minion3.render();
-
-minion4.render();
-minion5.render();
-minion6.render();
+const minion4 = new Minion(row = 0, column = 0, direction = 1, color = "#D8A7B1");
+const minion5 = new Minion(row = 0, column = 1, direction = 1, color = "#D8A7B1");
+const minion6 = new Minion(row = 0, column = 2, direction = 1, color = "#D8A7B1");
+lines[0].minions = [minion1, minion2, minion3, minion4, minion5, minion6];
+for (let m of lines[0].minions) {
+	m.render();
+}
 var keysPressed = [];
 function processInput() {
 	console.table(keysPressed);
 }
 
 function updateState() {
-	let updateMinions = keysPressed.filter((key) => key == "a");
-	if (updateMinions.length > 0) {
-		minion1.updateRow();
-		minion2.updateRow();
-		minion3.updateRow();
-
-		minion4.updateRow();
-		minion5.updateRow();
-		minion6.updateRow();
+	let aPressedCounter = keysPressed.filter((key) => key == "a");
+	if (aPressedCounter.length > 0) {
 	}
+
+	if ((lines[0].minions[0].row - lines[0].minions[lines[0].minions.length - 1].row) == 1) {
+		for (let m of lines[0].minions) {
+			m.isFightMode = true;
+		}
+	}
+
+	let aliveMinions = lines[0].minions.filter((value) => value.stats.attack > 0);
+	console.table(aliveMinions);
+	let minionsAttackSum = aliveMinions.reduce((accumulator, currentValue) => accumulator + currentValue.stats.attack, 0);
+	console.log({ minionsAttackSum });
+	aliveMinions.shift().updateState(attack = minionsAttackSum / 2);
+	aliveMinions.pop().updateState(attack = minionsAttackSum / 2);
+	for (let m of aliveMinions) {
+		m.updateState();
+	}
+
+
+
 }
 
 function render() {
-	minion1.render();
-	minion2.render();
-	minion3.render();
-
-	minion4.render();
-	minion5.render();
-	minion6.render();
+	for (let m of lines[0].minions) {
+		m.render();
+	}
 
 }
 function gameLoop() {
@@ -263,8 +302,8 @@ function gameLoop() {
 }
 
 const help = document.getElementById("help");
-const helpBase = "Press ctrl to trigger game loop, a to move"
-help.textContent = `${helpBase}list of keys pressed: ${keysPressed}`
+const helpBase = "Press ctrl to trigger game loop, A to move"
+help.textContent = `${helpBase} list of keys pressed: ${keysPressed}`
 document.addEventListener("keydown", (k) => {
 	if (k.key == "Control") {
 		gameLoop();
@@ -276,49 +315,5 @@ document.addEventListener("keydown", (k) => {
 		help.textContent = `${helpBase} list of keys pressed: ${keysPressed}`
 	}
 });
-
-const svgLayer10 = document.getElementById("layer-10");
-const svgLayer11 = document.getElementById("layer-11");
-const svgLayer12 = document.getElementById("layer-12");
-class Rectangle1 {
-	constructor(x, y, width, height, svgLayer = svgLayer10, color = "#8CA8B8", strokeWidth = 4, strokeColor = "#D6CFC7", element = document.createElementNS("http://www.w3.org/2000/svg", "rect")) {
-		this.svgLayer = svgLayer;
-		this.x = x;
-		this.y = y;
-		this.width = width;
-		this.height = height;
-		this.color = color;
-		this.strokeWidth = strokeWidth;
-		this.strokeColor = strokeColor;
-		this.element = element;
-
-		this.element.setAttribute("x", x);
-		this.element.setAttribute("y", y);
-		this.element.setAttribute("width", width);
-		this.element.setAttribute("height", height);
-
-		this.svgLayer.appendChild(this.element);
-	}
-
-	draw(color = this.color) {
-		this.element.style.fill = color;
-	}
-
-	drawBorder() {
-		this.element.style.fill = "none";
-		this.element.style.stroke = "#bbbbbb";
-		this.element.style.strokeWidth = this.strokeWidth;
-	}
-
-}
-const factor = 3;
-r1 = new Rectangle1(300, 300, 100 + factor * 50, 100 + 50, svgLayer = svgLayer10);
-r1.drawBorder()
-r2 = new Rectangle1(300, 300, 100 + factor * 100, 100 + 100, svgLayer = svgLayer11, color = "#C9D6CD");
-
-r3 = new Rectangle1(300, 300, 100 + factor * 150, 100 + 150, svgLayer = svgLayer12, color = "#C9Deee");
-r3.drawBorder()
-r1.draw()
-r3.draw()
 
 
