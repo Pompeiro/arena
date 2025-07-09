@@ -159,10 +159,10 @@ class Minion {
 
 	absorbAttack(attack) {
 		this.stats.hp = this.stats.hp - attack;
+		console.log("Minion absorbed attack", { attack });
 		if (this.stats.hp <= 0) {
 			this.stats.attack = 0;
-			grid[this.row][this.column].clear();
-			console.log("clear called");
+			this.clear();
 		}
 	}
 
@@ -181,12 +181,9 @@ class Minion {
 		}
 		grid[this.previousRow][this.column].clear();
 		grid[this.row][this.column].draw(color);
-		console.log("Render called")
 	}
 	clear() {
 		grid[this.row][this.column].clear();
-		console.log("Clear called");
-		console.log(this.row);
 	}
 
 
@@ -281,6 +278,7 @@ function updateState() {
 	let aliveMinions = lines[0].minions.filter((value) => value.stats.attack > 0);
 	console.table(aliveMinions);
 	let minionsAttackSum = aliveMinions.reduce((accumulator, currentValue) => accumulator + currentValue.stats.attack, 0);
+	console.log({ minionsAttackSum });
 	aliveMinions.shift().updateState(attack = minionsAttackSum / 2);
 	aliveMinions.pop().updateState(attack = minionsAttackSum / 2);
 	for (let m of aliveMinions) {
