@@ -2,6 +2,8 @@ const svgLayer0 = document.getElementById("layer-0");
 const svgLayer1 = document.getElementById("layer-1");
 const svgLayer2 = document.getElementById("layer-2");
 
+
+
 class Rectangle {
 	constructor(x, y, width, height, svgLayer = svgLayer0, color = "#8CA8B8", strokeWidth = 4, strokeColor = "#D6CFC7", element = document.createElementNS("http://www.w3.org/2000/svg", "rect")) {
 		this.svgLayer = svgLayer;
@@ -44,9 +46,26 @@ class Rectangle {
 
 	clear() {
 		this.element.style.fill = "none";
+		this.clearText();
 	}
 
+	addText(text) {
+		let textElement = document.createElementNS("http://www.w3.org/2000/svg", "text");
+		textElement.id = `text-${this.x}${this.y}`;
+		textElement.setAttribute("x", this.x + 20);
+		textElement.setAttribute("y", this.y + 20);
+		textElement.style.fontSize = 15;
+		textElement.style.fontWeight = 400;
+		textElement.innerHTML = text;
+		this.svgLayer.appendChild(textElement);
+	}
+	clearText() {
+		let text = document.getElementById(`text-${this.x}${this.y}`);
+		if (text != null) {
+			this.svgLayer.removeChild(text);
 
+		}
+	}
 }
 
 class Circle {
@@ -92,6 +111,14 @@ class Circle {
 }
 
 
+class TeamData {
+	constructor(color, direction, minionSpawnRow) {
+		this.color = color;
+		this.direction = direction;
+		this.minionSpawnRow = minionSpawnRow;
+	}
+}
+
 class Line {
 	lineWidthByRectangleCount = 3;
 	lineHeightByRectangleCount = gridRowCount;
@@ -134,25 +161,31 @@ class Line {
 }
 
 class Stats {
-	constructor(hp, attack) {
+	constructor(hp = 100, attack = 25, range = 1) {
 		this.hp = hp;
 		this.attack = attack;
+		this.range = range;
 	}
 }
 
 class Minion {
 	previousRow = 0;
 	isFightMode = false;
-	stats = new Stats(100, 25);
-	constructor(row, column, direction = -1, color = "#B0C4DE") {
+	constructor(row, column, direction = -1, color = "#B0C4DE", stats = new Stats(100, 25, 1)) {
 		this.row = row;
 		this.previousRow = row;
 		this.column = column;
 		this.color = color;
 		this.direction = direction;
+		this.stats = stats;
 	}
 
 	move() {
+		console.log("Minion move")
+		if (this.row + this.direction > grid.length - 1 || this.row + this.direction < 0) {
+			console.error("Grid Border has been reached!")
+			return null;
+		}
 		this.previousRow = this.row;
 		this.row = this.row + this.direction;
 	}
@@ -175,19 +208,142 @@ class Minion {
 		}
 	}
 
-	render(color = this.color) {
+	render(color = this.color, text = `hp:${this.stats.hp}`) {
 		if (this.isFightMode == true) {
+			grid[this.row][this.column].clearText();
+			grid[this.row][this.column].addText(text);
 			return null;
 		}
 		grid[this.previousRow][this.column].clear();
 		grid[this.row][this.column].draw(color);
+		grid[this.row][this.column].addText(text);
 	}
 	clear() {
 		grid[this.row][this.column].clear();
+		grid[this.row][this.column].clearText();
 	}
 
 
 }
+
+class Team {
+	minions = [];
+	constructor(teamData) {
+		this.teamData = teamData;
+	}
+
+	spawnMinions(amount) {
+		for (let i = 0; i < amount; i++) {
+			this.minions.push(new Minion(this.teamData.minionSpawnRow, i, this.teamData.direction, this.teamData.color));
+			console.log("Team:", this.teamData.color, "Spawned minion, minions:", this.minions)
+		}
+	}
+
+	spawnMinionsByRow(row, amount) {
+		for (let i = 0; i < amount; i++) {
+			this.minions.push(new Minion(row, i, this.teamData.direction, this.teamData.color));
+			console.log("Team:", this.teamData.color, "Spawned minion, minions:", this.minions)
+		}
+	}
+
+	removeDeadMinions() {
+		let previousLength = this.minions.length;
+		this.minions = this.minions.filter((minion) => minion.stats.hp > 0);
+		console.log("Team:", this.teamData.color, "Remove dead minions")
+		if (previousLength < this.minions.length) {
+			console.log("Removed count:", previousLength - this.minions.length);
+		}
+	}
+
+
+	getMinionsUniqueRows() {
+		let uniqueRows = [...new Set(this.minions.map((minion) => minion.row))];
+		console.log("Team:", this.teamData.color, "getMinionsUniqueRows");
+		console.log({ uniqueRows });
+		return uniqueRows;
+	}
+
+	getFarawayRow() {
+		let farawayRow = 0;
+		if (this.teamData.direction == 1) {
+			farawayRow = Math.max(...this.getMinionsUniqueRows());
+		}
+		else {
+			farawayRow = Math.min(...this.getMinionsUniqueRows());
+		}
+
+		console.log("Team:", this.teamData.color, "getFarawayRow");
+
+		console.log({ farawayRow });
+		return farawayRow;
+	}
+
+	getMinionsInRangeToEnemyRow(enemyRow) {
+		console.log("Team:", this.teamData.color, "getMinionsInRangeToEnemyRow");
+		let minionsInRange = this.minions.filter((minion) => minion.stats.range >= Math.abs(minion.row - enemyRow));
+		if (minionsInRange.length > 0) {
+			console.log("Found minions in range");
+		} else {
+			console.log("Minions in range not found");
+		}
+		return minionsInRange;
+	}
+
+	getMinionsOutOfRangeToEnemyRow(enemyRow) {
+		console.log("Team:", this.teamData.color, "getMinionsOutOfRangeToEnemyRow");
+		let minionsOutOfRange = this.minions.filter((minion) => minion.stats.range < Math.abs(minion.row - enemyRow));
+		if (minionsOutOfRange.length > 0) {
+			console.log("Found minions out of range");
+		} else {
+			console.log("Minions out of range not found");
+		}
+		return minionsOutOfRange;
+	}
+
+	setMinionsFightModeByRangeToEnemyRow(enemyRow) {
+		console.log("Team:", this.teamData.color, "setMinionsFightModeByRangeToEnemyRow");
+		for (let minion of this.getMinionsInRangeToEnemyRow(enemyRow)) {
+			minion.isFightMode = true;
+			console.log("SET is fight mode for minion");
+		}
+		for (let minion of this.getMinionsOutOfRangeToEnemyRow(enemyRow)) {
+			minion.isFightMode = false;
+			console.log("RESET is fight mode for minion");
+		}
+	}
+
+	getMinionsWithFightMode() {
+		let minionsWithFightMode = this.minions.filter((minion) => minion.isFightMode == true)
+		console.log("Team:", this.teamData.color, "getMionionsWithFightMode");
+		console.log({ minionsWithFightMode });
+		return minionsWithFightMode;
+	}
+
+
+	sumMinionsAttack() {
+		let sumResult = this.minions.reduce((accumulator, currentValue) => accumulator + currentValue.stats.attack, 0);
+		console.log("Team:", this.teamData.color, "sumMinionsAttack");
+		console.log({ sumResult });
+		return sumResult;
+	}
+
+	sumMinionsWithFightModeAttack() {
+		console.log("Team:", this.teamData.color, "sumMinionsWithFightModeAttack");
+		let sumResult = this.getMinionsWithFightMode().reduce((accumulator, currentValue) => accumulator + currentValue.stats.attack, 0);
+		console.log({ sumResult });
+		return sumResult;
+	}
+
+	sumMinionsAttackInRangeToEnemyRow(enemyRow) {
+		console.log("Team:", this.teamData.color, "sumMinionsAttackInRangeToEnemyRow");
+		let sumResult = this.getMinionsInRangeToEnemyRow(enemyRow).reduce((accumulator, currentValue) => accumulator + currentValue.stats.attack, 0);
+		console.log({ sumResult });
+		return sumResult;
+	}
+
+
+}
+
 
 const arenaWidth = 800;
 const arenaHeight = 600;
@@ -204,7 +360,7 @@ for (let row = 0; row < gridRowCount; row++) {
 		let rectangle = new Rectangle(col * gridRectangleWidth, row * gridRectangleHeight, gridRectangleWidth, gridRectangleHeight);
 		currentRow.push(rectangle);
 	}
-	grid.push(currentRow)
+	grid.push(currentRow);
 }
 console.table(grid);
 console.log("Grid element count is: ", grid.length);
@@ -216,8 +372,16 @@ for (let gridRow of grid) {
 		gridCol.drawBorder();
 	}
 }
+let teamRedData = new TeamData("#D8A7B1", 1, row = 0);
+let teamBlueData = new TeamData("#B0C4DE", -1, row = grid.length - 1);
 
+let teamRed = new Team(teamRedData)
+teamRed.spawnMinions(2);
 
+let teamBlue = new Team(teamBlueData)
+
+teamBlue.spawnMinionsByRow(3, 1);
+teamBlue.spawnMinions(1);
 const lines = [];
 const amountOfLines = 3;
 for (let i = 0; i < amountOfLines; i++) {
@@ -248,55 +412,69 @@ tower2Circle.draw()
 for (let line of lines) {
 	line.draw()
 }
-const minion1 = new Minion(row = grid.length - 1, column = 0);
-const minion2 = new Minion(row = grid.length - 1, column = 1);
-const minion3 = new Minion(row = grid.length - 1, column = 2);
 
-const minion4 = new Minion(row = 0, column = 0, direction = 1, color = "#D8A7B1");
-const minion5 = new Minion(row = 0, column = 1, direction = 1, color = "#D8A7B1");
-const minion6 = new Minion(row = 0, column = 2, direction = 1, color = "#D8A7B1");
-lines[0].minions = [minion1, minion2, minion3, minion4, minion5, minion6];
+lines[0].minions = [...teamRed.minions, ...teamBlue.minions];
+console.log(lines[0].minions);
 for (let m of lines[0].minions) {
 	m.render();
 }
 var keysPressed = [];
-function processInput() {
+function processUserInput() {
 	console.table(keysPressed);
-}
-
-function updateState() {
 	let aPressedCounter = keysPressed.filter((key) => key == "a");
 	if (aPressedCounter.length > 0) {
 	}
+}
 
-	if ((lines[0].minions[0].row - lines[0].minions[lines[0].minions.length - 1].row) == 1) {
-		for (let m of lines[0].minions) {
-			m.isFightMode = true;
+function processEngineInput() {
+
+}
+
+function updateState() {
+	teamRed.removeDeadMinions();
+	teamBlue.removeDeadMinions();
+	let aliveMinions = [...teamRed.minions, ...teamBlue.minions];
+	console.table(aliveMinions);
+	console.info(teamRed.getMinionsUniqueRows());
+
+
+	teamRed.setMinionsFightModeByRangeToEnemyRow(teamBlue.getFarawayRow());
+	teamBlue.setMinionsFightModeByRangeToEnemyRow(teamRed.getFarawayRow());
+
+	for (let [i, m] of teamRed.minions.entries()) {
+		if (i == 0) {
+			m.updateState(attack = teamBlue.sumMinionsWithFightModeAttack());
+		}
+		else {
+			m.updateState(0);
+		}
+
+	}
+	for (let [i, m] of teamBlue.minions.entries()) {
+		if (i == 0) {
+			m.updateState(attack = teamRed.sumMinionsWithFightModeAttack());
+		}
+
+		else {
+			m.updateState(0);
 		}
 	}
-
-	let aliveMinions = lines[0].minions.filter((value) => value.stats.attack > 0);
-	console.table(aliveMinions);
-	let minionsAttackSum = aliveMinions.reduce((accumulator, currentValue) => accumulator + currentValue.stats.attack, 0);
-	console.log({ minionsAttackSum });
-	aliveMinions.shift().updateState(attack = minionsAttackSum / 2);
-	aliveMinions.pop().updateState(attack = minionsAttackSum / 2);
-	for (let m of aliveMinions) {
-		m.updateState();
-	}
-
 
 
 }
 
 function render() {
-	for (let m of lines[0].minions) {
+	for (let m of teamRed.minions) {
+		m.render();
+	}
+	for (let m of teamBlue.minions) {
 		m.render();
 	}
 
 }
 function gameLoop() {
-	processInput();
+	processUserInput();
+	processEngineInput();
 	updateState();
 	render();
 }
