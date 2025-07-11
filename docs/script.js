@@ -171,7 +171,7 @@ class Stats {
 class Minion {
 	previousRow = 0;
 	isFightMode = false;
-	constructor(row, column, direction = -1, color = "#B0C4DE", stats = new Stats(100, 25, 1)) {
+	constructor(row, column, direction = -1, color = "#B0C4DE", stats = new Stats(550, 25, 1)) {
 		this.row = row;
 		this.previousRow = row;
 		this.column = column;
@@ -199,11 +199,44 @@ class Minion {
 		}
 	}
 
-	updateState(attack = 0) {
+	jumpToFirstFreeColumn({ lineNumber = 0, lineWidthByRectangleCount = 3, lineSeparationByRectangleCount = 1, fightModeRow = 8 }) {
+		console.log("Minion jumpToFirstFreeColumn");
+		console.log({ fightModeRow });
+
+		let lineStart = lineNumber * (lineWidthByRectangleCount + lineSeparationByRectangleCount);
+		let lineEnd = lineNumber * (lineWidthByRectangleCount + lineSeparationByRectangleCount) + lineWidthByRectangleCount;
+		let g = grid[fightModeRow];
+		let columns = grid[fightModeRow].slice(lineStart, lineEnd);
+		let freeColumns = columns.filter((rectangle) => rectangle.element.style.fill == "none");
+		g.pop();
+		console.table({ columns })
+		console.table({ freeColumns })
+		if (freeColumns.length > 0) {
+			console.log("Found free columns in fightModeRow");
+			this.clear();
+			this.column = this.column + 1;
+		}
+	}
+
+	detectCollision({ fightModeRow = 5 }) {
+		console.log("Minion detectCollision");
+		console.log(Math.abs(this.row - fightModeRow));
+		if (Math.abs(this.row - fightModeRow) == 1) {
+			this.jumpToFirstFreeColumn({ fightModeRow: fightModeRow })
+		}
+	}
+
+	updateState(attack = 0, fightModeRow = null) {
+		console.log("Minion updateState");
+		console.log({ fightModeRow });
 		if (this.isFightMode == true) {
 			this.absorbAttack(attack);
+
 		}
 		else {
+			if (fightModeRow != null) {
+				this.detectCollision({ fightModeRow: fightModeRow });
+			}
 			this.move();
 		}
 	}
@@ -228,6 +261,7 @@ class Minion {
 
 class Team {
 	minions = [];
+	fightModeRow = null;
 	constructor(teamData) {
 		this.teamData = teamData;
 	}
@@ -302,9 +336,12 @@ class Team {
 
 	setMinionsFightModeByRangeToEnemyRow(enemyRow) {
 		console.log("Team:", this.teamData.color, "setMinionsFightModeByRangeToEnemyRow");
-		for (let minion of this.getMinionsInRangeToEnemyRow(enemyRow)) {
+		for (let [i, minion] of this.getMinionsInRangeToEnemyRow(enemyRow).entries()) {
 			minion.isFightMode = true;
 			console.log("SET is fight mode for minion");
+			if (i == 0) {
+				this.fightModeRow = minion.row;
+			}
 		}
 		for (let minion of this.getMinionsOutOfRangeToEnemyRow(enemyRow)) {
 			minion.isFightMode = false;
@@ -446,7 +483,7 @@ function updateState() {
 			m.updateState(attack = teamBlue.sumMinionsWithFightModeAttack());
 		}
 		else {
-			m.updateState(0);
+			m.updateState(0, teamRed.fightModeRow);
 		}
 
 	}
@@ -456,7 +493,7 @@ function updateState() {
 		}
 
 		else {
-			m.updateState(0);
+			m.updateState(0, teamBlue.fightModeRow);
 		}
 	}
 
