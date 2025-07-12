@@ -40,7 +40,12 @@ class Rectangle {
 	draw(color = this.color) {
 		this.element.style.fill = color;
 	}
-
+	addCustomId(id) {
+		this.element.setAttribute("CUSTOMID", id);
+	}
+	removeCustomId() {
+		this.element.removeAttribute("CUSTOMID");
+	}
 	drawBorder() {
 		this.element.style.fill = "none";
 
@@ -116,11 +121,10 @@ class Circle {
 
 
 class TeamData {
-	constructor(color, direction, minionSpawnRow, movePriority) {
+	constructor(color, direction, minionSpawnRow) {
 		this.color = color;
 		this.direction = direction;
 		this.minionSpawnRow = minionSpawnRow;
-		this.movePriority = movePriority;
 	}
 }
 
@@ -174,23 +178,38 @@ class Stats {
 	}
 }
 
+var customId = 0;
+function customIdIncrement() {
+	customId++;
+	return `${customId}`;
+}
 class Minion {
 	previousRow = 0;
 	movePriorityModifier = 10;
 	isFightMode = false;
-
+	customId = customIdIncrement();
 	movePriority = 0;
-	constructor(row, column, direction = -1, color = "#B0C4DE", stats = new Stats(100, 25, 1)) {
+	absorbAttackPriority = 0;
+	constructor(row, column, direction = -1, color = "#B0C4DE", stats = new Stats(500, 25, 1)) {
 		this.row = row;
 		this.previousRow = row;
 		this.column = column;
+		this.previousColumn = column;
 		this.color = color;
 		this.direction = direction;
 		this.stats = stats;
+		this.maxHp = this.stats.hp;
 	}
+
 	addToMoveQueue() {
 		this.movePriority = this.movePriorityModifier + this.row * this.direction
 		moveQueue.push(this);
+	}
+
+	addToFightQueue() {
+		console.log("Add to fight queue with setting priority by lowest hp and most left column");
+		this.absorbAttackPriority = this.maxHp / this.stats.hp + 1 / (this.column + 1) / 100;
+		fightQueue.push(this);
 	}
 
 	move() {
@@ -205,7 +224,34 @@ class Minion {
 			this.render();
 		}
 		else {
-			console.error("Cant move forward, forward row is occupied")
+			if (this.isFightMode == false) {
+				console.log("Checking remaining columns in width 3 line");
+				let columnsToCheck = [];
+				switch (this.column % 3) {
+					case 0:
+						columnsToCheck = [1, 2];
+						break;
+					case 1:
+						columnsToCheck = [-1, 1];
+						break;
+					case 2:
+						columnsToCheck = [-2, -1];
+						break;
+				}
+				for (let i of columnsToCheck) {
+					if (grid[this.row + this.direction][this.column + i].checkIsOccupied() == false) {
+						this.previousRow = this.row;
+						this.previousColumn = this.column;
+						this.row = this.row + this.direction
+						this.column = this.column + i
+						this.render();
+						console.log("Found free column, pushing minion forward");
+						return null;
+					}
+
+				}
+			}
+			console.error("Cant move forward, forward row is occupied");
 		}
 
 	}
@@ -221,52 +267,12 @@ class Minion {
 		this.render();
 	}
 
-	jumpToFirstFreeColumn({ lineNumber = 0, lineWidthByRectangleCount = 3, lineSeparationByRectangleCount = 1, fightModeRow = 8 }) {
-		console.log("Minion jumpToFirstFreeColumn");
-		console.log({ fightModeRow });
-
-		let lineStart = lineNumber * (lineWidthByRectangleCount + lineSeparationByRectangleCount);
-		let lineEnd = lineNumber * (lineWidthByRectangleCount + lineSeparationByRectangleCount) + lineWidthByRectangleCount;
-		let g = grid[fightModeRow];
-		let columns = grid[fightModeRow].slice(lineStart, lineEnd);
-		let freeColumns = columns.filter((rectangle) => rectangle.element.style.fill == "none");
-		let firstfreeColumnIndex = null;
-		for (const [i, rectangle] of columns.entries()) {
-			if (rectangle.element.style.fill == "none") {
-				firstfreeColumnIndex = i;
-				break;
-			}
-		}
-
-		g.pop();
-		console.table({ columns })
-		console.table({ freeColumns })
-		if (firstfreeColumnIndex != null) {
-			console.log("Found free columns in fightModeRow");
-			this.clear();
-			this.column = firstfreeColumnIndex;
-		}
-	}
-
-	detectCollision({ fightModeRow = 5 }) {
-		console.log("Minion detectCollision");
-		console.log(Math.abs(this.row - fightModeRow));
-		if (Math.abs(this.row - fightModeRow) == 1) {
-			this.jumpToFirstFreeColumn({ fightModeRow: fightModeRow })
-		}
-	}
-
-	updateState(attack = 0, fightModeRow = null) {
+	updateState() {
 		console.log("Minion updateState");
-		console.log({ fightModeRow });
 		if (this.isFightMode == true) {
-			this.absorbAttack(attack);
-
+			this.addToFightQueue();
 		}
 		else {
-			if (fightModeRow != null) {
-				this.detectCollision({ fightModeRow: fightModeRow });
-			}
 			this.addToMoveQueue();
 		}
 	}
@@ -277,12 +283,15 @@ class Minion {
 			grid[this.row][this.column].addText(text);
 			return null;
 		}
-		grid[this.previousRow][this.column].clear();
+		grid[this.previousRow][this.previousColumn].clear();
+		grid[this.previousRow][this.previousColumn].removeCustomId();
 		grid[this.row][this.column].draw(color);
+		grid[this.row][this.column].addCustomId(this.customId);
 		grid[this.row][this.column].addText(text);
 	}
 	clear() {
 		grid[this.row][this.column].clear();
+		grid[this.row][this.column].removeCustomId();
 		grid[this.row][this.column].clearText();
 	}
 
@@ -450,9 +459,10 @@ teamRed.spawnMinions(3);
 
 let teamBlue = new Team(teamBlueData)
 
-teamBlue.spawnMinionsByRow(2, 3);
+teamBlue.spawnMinionsByRow(1, 1);
+teamBlue.spawnMinionsByRow(3, 2);
 teamBlue.spawnMinionsByRow(6, 3);
-teamBlue.spawnMinions(1);
+teamBlue.spawnMinionsByRow(7, 3);
 const lines = [];
 const amountOfLines = 3;
 const lineWidthByRectangleCount = 3;
@@ -501,14 +511,14 @@ function processUserInput() {
 	}
 }
 
-function processEngineInput() {
 
-}
 
 var moveQueue = [];
+var fightQueue = [];
 
 function updateState() {
 	moveQueue = [];
+	fightQueue = [];
 	teamRed.removeDeadMinions();
 	teamBlue.removeDeadMinions();
 	let aliveMinions = [...teamRed.minions, ...teamBlue.minions];
@@ -518,30 +528,27 @@ function updateState() {
 
 	teamRed.setMinionsFightModeByRangeToEnemyRow(teamBlue.getFarawayRow());
 	teamBlue.setMinionsFightModeByRangeToEnemyRow(teamRed.getFarawayRow());
+	let teamRedCurrentTurnAttack = teamRed.sumMinionsWithFightModeAttack();
+	let teamBlueCurrentTurnAttack = teamBlue.sumMinionsWithFightModeAttack();
 
-	for (let [i, m] of teamRed.minions.entries()) {
-		if (i == 0) {
-			m.updateState(attack = teamBlue.sumMinionsWithFightModeAttack());
-		}
-		else {
-			m.updateState(0, teamRed.fightModeRow);
-		}
-
+	for (let m of aliveMinions) {
+		m.updateState();
 	}
-	for (let [i, m] of teamBlue.minions.entries()) {
-		if (i == 0) {
-			m.updateState(attack = teamRed.sumMinionsWithFightModeAttack());
-		}
+	if (fightQueue.length > 0) {
+		fightQueue = fightQueue.sort((a, b) => (b.absorbAttackPriority - a.absorbAttackPriority));
+		console.log("fightQueue table");
+		console.table(fightQueue);
+		let teamRedMinionToAbsorbAttack = fightQueue.find((x) => x.color == teamRed.teamData.color);
+		let teamBlueMinionToAbsorbAttack = fightQueue.find((x) => x.color == teamBlue.teamData.color);
 
-		else {
-			m.updateState(0, teamBlue.fightModeRow);
-		}
+		teamRedMinionToAbsorbAttack.absorbAttack(teamBlueCurrentTurnAttack);
+		teamBlueMinionToAbsorbAttack.absorbAttack(teamRedCurrentTurnAttack);
 	}
+
 	moveQueue = moveQueue.sort((a, b) => b.movePriority - a.movePriority);
 	console.table(moveQueue)
 	for (m of moveQueue) {
 		m.move();
-
 	}
 
 
@@ -558,7 +565,6 @@ function render() {
 }
 function gameLoop() {
 	processUserInput();
-	processEngineInput();
 	updateState();
 }
 
