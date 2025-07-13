@@ -52,7 +52,6 @@ class Rectangle {
 	}
 
 	getOccupiedBy() {
-
 		if (this.element.style.fill == "none") {
 			return "none";
 		} else if (redTeamColors.includes(this.element.style.fill)) {
@@ -299,7 +298,7 @@ class Minion {
 
 	getSwapColumns() {
 		let swapColumns = [];
-		switch (this.column % 3) {
+		switch ((this.column - this.lineOffset) % 3) {
 			case 0:
 				swapColumns = [1, 2];
 				break;
@@ -327,9 +326,7 @@ class Minion {
 				return true;
 			}
 		}
-
 		console.error("Cant move forward, forward row is occupied");
-
 	}
 
 	setMovePriority() {
