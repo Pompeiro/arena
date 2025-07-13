@@ -2,7 +2,25 @@ const svgLayer0 = document.getElementById("layer-0");
 const svgLayer1 = document.getElementById("layer-1");
 const svgLayer2 = document.getElementById("layer-2");
 
+const COLUMNS_IN_LINE = 3;
 
+const TEAM_RED = "red";
+const TEAM_BLUE = "blue";
+const TEAM_RED_MINION_COLOR = "rgb(216, 167, 177)";
+const TEAM_BLUE_MINION_COLOR = "rgb(176, 196, 222)";
+
+const redTeamColors = [TEAM_RED_MINION_COLOR];
+const blueTeamColors = [TEAM_BLUE_MINION_COLOR];
+
+var globalAllAttackableObjects = [];
+var globalMinions = [];
+function removeDeadMinions() {
+	let previousLength = globalMinions.length;
+	globalMinions = globalMinions.filter((minion) => minion.stats.hp > 0);
+	if (previousLength < globalMinions.length) {
+		console.log("Removed minions count:", previousLength - globalMinions.length);
+	}
+}
 
 class Rectangle {
 	constructor(x, y, width, height, svgLayer = svgLayer0, color = "#8CA8B8", strokeWidth = 4, strokeColor = "#D6CFC7", element = document.createElementNS("http://www.w3.org/2000/svg", "rect")) {
@@ -33,19 +51,33 @@ class Rectangle {
 		this.svgLayer.appendChild(this.element);
 	}
 
-	checkIsOccupied() {
-		return this.element.style.fill != "none";
+	getOccupiedBy() {
+		if (this.element.style.fill == "none") {
+			return "none";
+		} else if (redTeamColors.includes(this.element.style.fill)) {
+			return TEAM_RED;
+		}
+		else if (blueTeamColors.includes(this.element.style.fill)) {
+			return TEAM_BLUE;
+		}
 	}
 
 	draw(color = this.color) {
 		this.element.style.fill = color;
 	}
+
 	addCustomId(id) {
 		this.element.setAttribute("CUSTOMID", id);
 	}
+
 	removeCustomId() {
 		this.element.removeAttribute("CUSTOMID");
 	}
+
+	getCustomId() {
+		return this.element.getAttribute("CUSTOMID");
+	}
+
 	drawBorder() {
 		this.element.style.fill = "none";
 
@@ -121,27 +153,30 @@ class Circle {
 
 
 class TeamData {
-	constructor(color, direction, minionSpawnRow) {
+	constructor(color, direction, minionSpawnRow, team, enemyTeam) {
 		this.color = color;
 		this.direction = direction;
 		this.minionSpawnRow = minionSpawnRow;
+		this.team = team;
+		this.enemyTeam = enemyTeam;
 	}
 }
 
 class Line {
-
-	lineHeightByRectangleCount = gridRowCount;
-	minions = [];
-	constructor(gridPart, lineWidthByRectangleCount = 3, svgLayer = svgLayer2, color = "#E6E6FA", strokeWidth = 4, strokeColor = "#D6CFC7", element = document.createElementNS("http://www.w3.org/2000/svg", "rect",)) {
+	heightByRectangleCount = gridRowCount;
+	redTeamMinions = [];
+	blueTeamMinions = [];
+	constructor(gridPart, columnStartingPoint = 0, widthByRectangleCount = 3, svgLayer = svgLayer2, color = "#E6E6FA", strokeWidth = 4, strokeColor = "#D6CFC7", element = document.createElementNS("http://www.w3.org/2000/svg", "rect",)) {
 
 		const { x, y, width, height } = gridPart[0][0]
 		this.gridPart = gridPart;
 		this.svgLayer = svgLayer;
 		this.x = x;
 		this.y = y;
-		this.lineWidthByRectangleCount = lineWidthByRectangleCount;
-		this.width = width * this.lineWidthByRectangleCount;
-		this.height = height * this.lineHeightByRectangleCount;
+		this.columnStartingPoint = columnStartingPoint;
+		this.widthByRectangleCount = widthByRectangleCount;
+		this.width = width * this.widthByRectangleCount;
+		this.height = height * this.heightByRectangleCount;
 		this.color = color;
 		this.strokeWidth = strokeWidth;
 		this.strokeColor = strokeColor;
@@ -168,6 +203,11 @@ class Line {
 		this.element.style.strokeWidth = this.strokeWidth;
 	}
 
+	spawnMinionsByTeam(team) {
+		team.spawnMinionsByLine(this);
+	}
+
+
 }
 
 class Stats {
@@ -183,84 +223,140 @@ function customIdIncrement() {
 	customId++;
 	return `${customId}`;
 }
+
+
 class Minion {
 	previousRow = 0;
 	movePriorityModifier = 10;
-	isFightMode = false;
+	targetRow = null;
 	customId = customIdIncrement();
 	movePriority = 0;
-	absorbAttackPriority = 0;
-	constructor(row, column, direction = -1, color = "#B0C4DE", stats = new Stats(500, 25, 1)) {
+	attackToAbsorb = 0;
+	constructor(row, column, direction = -1, team = TEAM_BLUE, enemyTeam = TEAM_RED, color = TEAM_BLUE_MINION_COLOR, lineOffset = 0, stats = new Stats(300, 25, 1)) {
 		this.row = row;
 		this.previousRow = row;
 		this.column = column;
 		this.previousColumn = column;
 		this.color = color;
 		this.direction = direction;
+		this.team = team;
+		this.enemyTeam = enemyTeam;
+		this.lineOffset = lineOffset;
 		this.stats = stats;
 		this.maxHp = this.stats.hp;
 	}
 
-	addToMoveQueue() {
-		this.movePriority = this.movePriorityModifier + this.row * this.direction
-		moveQueue.push(this);
+	getEnemiesColumns() {
+		let enemiesColumns = [];
+		switch ((this.column - this.lineOffset) % 3) {
+			case 0:
+				enemiesColumns = [0, 1, 2];
+				break;
+			case 1:
+				enemiesColumns = [-1, 0, 1];
+				break;
+			case 2:
+				enemiesColumns = [-2, -1, 0];
+				break;
+		}
+		return enemiesColumns;
 	}
 
-	addToFightQueue() {
-		console.log("Add to fight queue with setting priority by lowest hp and most left column");
-		this.absorbAttackPriority = this.maxHp / this.stats.hp + 1 / (this.column + 1) / 100;
-		fightQueue.push(this);
+
+
+	setTargetRow() {
+		this.targetRow = null;
+		let minimumRange = 1;
+		for (let i = minimumRange; i <= this.stats.range; i++) {
+			if (this.row + (i * this.direction) > grid.length - 1 || this.row + (i * this.direction) < 0) {
+				//turn off searching outside grid
+				return this.targetRow;
+			}
+			for (let col of this.getEnemiesColumns()) {
+				if (grid[this.row + (i * this.direction)][this.column + col].getOccupiedBy() == this.enemyTeam) {
+					this.targetRow = this.row + (i * this.direction);
+					console.error("found enemy row in range")
+					return this.targetRow;
+				}
+			}
+		}
+		return this.targetRow;
+	}
+
+	attackTargetRow() {
+		console.log("Attack lowest hp and most left column");
+		let targets = [];
+		for (let col of this.getEnemiesColumns()) {
+			if (grid[this.targetRow][this.column + col].getOccupiedBy() == this.enemyTeam) {
+				let targetId = grid[this.targetRow][this.column + col].getCustomId();
+				targets.push(globalMinions.find((x) => x.customId == targetId));
+			}
+		}
+		targets.sort((a, b) => (b.maxHp / b.stats.hp + 1 / (b.column + 1) / 100) - (a.maxHp / a.stats.hp + 1 / (a.column + 1) / 100));
+		targets[0].attackToAbsorb = targets[0].attackToAbsorb + this.stats.attack;
+	}
+
+	getSwapColumns() {
+		let swapColumns = [];
+		switch ((this.column - this.lineOffset) % 3) {
+			case 0:
+				swapColumns = [1, 2];
+				break;
+			case 1:
+				swapColumns = [-1, 1];
+				break;
+			case 2:
+				swapColumns = [-2, -1];
+				break;
+		}
+		return swapColumns;
+	}
+
+	swapColumn() {
+		console.log("Checking remaining columns in width 3 line");
+		for (let i of this.getSwapColumns()) {
+			if (grid[this.row + this.direction][this.column + i].getOccupiedBy() == "none") {
+				this.previousRow = this.row;
+				this.previousColumn = this.column;
+				this.row = this.row + this.direction
+				this.column = this.column + i
+				this.render();
+				this.previousColumn = this.column;
+				console.log("Found free column, pushing minion forward");
+				return true;
+			}
+		}
+		console.error("Cant move forward, forward row is occupied");
+	}
+
+	setMovePriority() {
+		this.movePriority = this.movePriorityModifier + this.row * this.direction;
 	}
 
 	move() {
-		console.log("Minion move")
+		console.log("Minion move");
 		if (this.row + this.direction > grid.length - 1 || this.row + this.direction < 0) {
 			console.error("Grid Border has been reached!")
 			return null;
 		}
-		if (grid[this.row + this.direction][this.column].checkIsOccupied() == false) {
+		if (grid[this.row + this.direction][this.column].getOccupiedBy() == "none") {
 			this.previousRow = this.row;
 			this.row = this.row + this.direction;
 			this.render();
 		}
 		else {
-			if (this.isFightMode == false) {
-				console.log("Checking remaining columns in width 3 line");
-				let columnsToCheck = [];
-				switch (this.column % 3) {
-					case 0:
-						columnsToCheck = [1, 2];
-						break;
-					case 1:
-						columnsToCheck = [-1, 1];
-						break;
-					case 2:
-						columnsToCheck = [-2, -1];
-						break;
-				}
-				for (let i of columnsToCheck) {
-					if (grid[this.row + this.direction][this.column + i].checkIsOccupied() == false) {
-						this.previousRow = this.row;
-						this.previousColumn = this.column;
-						this.row = this.row + this.direction
-						this.column = this.column + i
-						this.render();
-						console.log("Found free column, pushing minion forward");
-						return null;
-					}
-
-				}
+			if (grid[this.row + this.direction][this.column].getOccupiedBy() == this.team) {
+				this.swapColumn()
 			}
-			console.error("Cant move forward, forward row is occupied");
 		}
 
 	}
 
-	absorbAttack(attack) {
-		this.stats.hp = this.stats.hp - attack;
-		console.log("Minion absorbed attack", { attack });
+	absorbAttack() {
+		this.stats.hp = this.stats.hp - this.attackToAbsorb;
+		console.log("Minion absorbed attack", this.attackToAbsorb);
+		this.attackToAbsorb = 0;
 		if (this.stats.hp <= 0) {
-			this.stats.attack = 0;
 			this.clear();
 			return null;
 		}
@@ -269,16 +365,23 @@ class Minion {
 
 	updateState() {
 		console.log("Minion updateState");
-		if (this.isFightMode == true) {
-			this.addToFightQueue();
+		if (this.setTargetRow() == null) {
+			this.move();
+			// workaround as red team moves first to be able to attack in the same turn
+			if (this.team == TEAM_RED) {
+				if (this.setTargetRow() != null) {
+					this.attackTargetRow();
+				}
+			}
 		}
 		else {
-			this.addToMoveQueue();
+			this.attackTargetRow();
 		}
+		this.setMovePriority();
 	}
 
 	render(color = this.color, text = `hp:${this.stats.hp}`) {
-		if (this.isFightMode == true) {
+		if (this.targetRow != null) {
 			grid[this.row][this.column].clearText();
 			grid[this.row][this.column].addText(text);
 			return null;
@@ -287,139 +390,44 @@ class Minion {
 		grid[this.previousRow][this.previousColumn].removeCustomId();
 		grid[this.row][this.column].draw(color);
 		grid[this.row][this.column].addCustomId(this.customId);
+		grid[this.row][this.column].clearText();
 		grid[this.row][this.column].addText(text);
 	}
+
 	clear() {
 		grid[this.row][this.column].clear();
 		grid[this.row][this.column].removeCustomId();
 		grid[this.row][this.column].clearText();
 	}
 
-
 }
 
 class Team {
-	minions = [];
-	fightModeRow = null;
 	constructor(teamData) {
 		this.teamData = teamData;
 	}
 
 	spawnMinions(amount) {
 		for (let i = 0; i < amount; i++) {
-			this.minions.push(new Minion(this.teamData.minionSpawnRow, i, this.teamData.direction, this.teamData.color));
-			console.log("Team:", this.teamData.color, "Spawned minion, minions:", this.minions)
+			globalMinions.push(new Minion(this.teamData.minionSpawnRow, i, this.teamData.direction, this.teamData.team, this.teamData.enemyTeam, this.teamData.color, 0));
+			console.log("Team:", this.teamData.color, "Spawned minion, minions:", globalMinions)
 		}
 	}
 
 	spawnMinionsByRow(row, amount) {
 		for (let i = 0; i < amount; i++) {
-			this.minions.push(new Minion(row, i, this.teamData.direction, this.teamData.color));
-			console.log("Team:", this.teamData.color, "Spawned minion, minions:", this.minions)
+			globalMinions.push(new Minion(row, i, this.teamData.direction, this.teamData.team, this.teamData.enemyTeam, this.teamData.color, 0));
+			console.log("Team:", this.teamData.color, "Spawned minion, minions:", globalMinions)
 		}
 	}
 
-	removeDeadMinions() {
-		let previousLength = this.minions.length;
-		this.minions = this.minions.filter((minion) => minion.stats.hp > 0);
-		console.log("Team:", this.teamData.color, "Remove dead minions")
-		if (previousLength < this.minions.length) {
-			console.log("Removed count:", previousLength - this.minions.length);
+	spawnMinionsByLine(line, amount = 3) {
+		for (let i = 0; i < amount; i++) {
+			let spawnedMinion = new Minion(this.teamData.minionSpawnRow, line.columnStartingPoint + i, this.teamData.direction, this.teamData.team, this.teamData.enemyTeam, this.teamData.color, line.columnStartingPoint);
+			globalMinions.push(spawnedMinion);
+			console.log("Team:", this.teamData.color, "Spawned minion, minions:", globalMinions)
 		}
 	}
-
-
-	getMinionsUniqueRows() {
-		let uniqueRows = [...new Set(this.minions.map((minion) => minion.row))];
-		console.log("Team:", this.teamData.color, "getMinionsUniqueRows");
-		console.log({ uniqueRows });
-		return uniqueRows;
-	}
-
-	getFarawayRow() {
-		let farawayRow = 0;
-		if (this.teamData.direction == 1) {
-			farawayRow = Math.max(...this.getMinionsUniqueRows());
-		}
-		else {
-			farawayRow = Math.min(...this.getMinionsUniqueRows());
-		}
-
-		console.log("Team:", this.teamData.color, "getFarawayRow");
-
-		console.log({ farawayRow });
-		return farawayRow;
-	}
-
-	getMinionsInRangeToEnemyRow(enemyRow) {
-		console.log("Team:", this.teamData.color, "getMinionsInRangeToEnemyRow");
-		let minionsInRange = this.minions.filter((minion) => minion.stats.range >= Math.abs(minion.row - enemyRow));
-		if (minionsInRange.length > 0) {
-			console.log("Found minions in range");
-		} else {
-			console.log("Minions in range not found");
-		}
-		return minionsInRange;
-	}
-
-	getMinionsOutOfRangeToEnemyRow(enemyRow) {
-		console.log("Team:", this.teamData.color, "getMinionsOutOfRangeToEnemyRow");
-		let minionsOutOfRange = this.minions.filter((minion) => minion.stats.range < Math.abs(minion.row - enemyRow));
-		if (minionsOutOfRange.length > 0) {
-			console.log("Found minions out of range");
-		} else {
-			console.log("Minions out of range not found");
-		}
-		return minionsOutOfRange;
-	}
-
-	setMinionsFightModeByRangeToEnemyRow(enemyRow) {
-		console.log("Team:", this.teamData.color, "setMinionsFightModeByRangeToEnemyRow");
-		for (let [i, minion] of this.getMinionsInRangeToEnemyRow(enemyRow).entries()) {
-			minion.isFightMode = true;
-			console.log("SET is fight mode for minion");
-			if (i == 0) {
-				this.fightModeRow = minion.row;
-			}
-		}
-		for (let [i, minion] of this.getMinionsOutOfRangeToEnemyRow(enemyRow).entries()) {
-			minion.isFightMode = false;
-			console.log("RESET is fight mode for minion");
-			if (i == this.minions.length - 1) {
-				this.fightModeRow = null;
-			}
-		}
-	}
-
-	getMinionsWithFightMode() {
-		let minionsWithFightMode = this.minions.filter((minion) => minion.isFightMode == true)
-		console.log("Team:", this.teamData.color, "getMionionsWithFightMode");
-		console.log({ minionsWithFightMode });
-		return minionsWithFightMode;
-	}
-
-
-	sumMinionsAttack() {
-		let sumResult = this.minions.reduce((accumulator, currentValue) => accumulator + currentValue.stats.attack, 0);
-		console.log("Team:", this.teamData.color, "sumMinionsAttack");
-		console.log({ sumResult });
-		return sumResult;
-	}
-
-	sumMinionsWithFightModeAttack() {
-		console.log("Team:", this.teamData.color, "sumMinionsWithFightModeAttack");
-		let sumResult = this.getMinionsWithFightMode().reduce((accumulator, currentValue) => accumulator + currentValue.stats.attack, 0);
-		console.log({ sumResult });
-		return sumResult;
-	}
-
-	sumMinionsAttackInRangeToEnemyRow(enemyRow) {
-		console.log("Team:", this.teamData.color, "sumMinionsAttackInRangeToEnemyRow");
-		let sumResult = this.getMinionsInRangeToEnemyRow(enemyRow).reduce((accumulator, currentValue) => accumulator + currentValue.stats.attack, 0);
-		console.log({ sumResult });
-		return sumResult;
-	}
-
 
 }
 
@@ -451,18 +459,17 @@ for (let gridRow of grid) {
 		gridCol.drawBorder();
 	}
 }
-let teamRedData = new TeamData("#D8A7B1", 1, row = 0);
-let teamBlueData = new TeamData("#B0C4DE", -1, row = grid.length - 1);
+let teamRedData = new TeamData(TEAM_RED_MINION_COLOR, 1, 0, TEAM_RED, TEAM_BLUE);
+let teamBlueData = new TeamData(TEAM_BLUE_MINION_COLOR, -1, grid.length - 1, TEAM_BLUE, TEAM_RED);
 
 let teamRed = new Team(teamRedData)
-teamRed.spawnMinions(3);
+teamRed.spawnMinions(1);
 
 let teamBlue = new Team(teamBlueData)
 
-teamBlue.spawnMinionsByRow(1, 1);
-teamBlue.spawnMinionsByRow(3, 2);
-teamBlue.spawnMinionsByRow(6, 3);
-teamBlue.spawnMinionsByRow(7, 3);
+teamBlue.spawnMinionsByRow(2, 2);
+teamBlue.spawnMinionsByRow(3, 3);
+
 const lines = [];
 const amountOfLines = 3;
 const lineWidthByRectangleCount = 3;
@@ -472,13 +479,16 @@ for (let i = 0; i < amountOfLines; i++) {
 		gridPart.push(row.slice(i * 4, i * 4 + lineWidthByRectangleCount));
 	}
 
-	lines.push(new Line(gridPart, lineWidthByRectangleCount));
+	lines.push(new Line(gridPart, i * 4, lineWidthByRectangleCount));
 }
 
 
+lines[1].spawnMinionsByTeam(teamRed);
 
 
 
+lines[2].spawnMinionsByTeam(teamRed);
+lines[2].spawnMinionsByTeam(teamBlue);
 //const tower = grid[1][6]
 
 //const towerCircle = new Circle(cx = tower.x + gridRectangleWidth / 2, cy = tower.y + gridRectangleHeight / 2, r = gridRectangleWidth / 2 * 3)
@@ -498,11 +508,7 @@ for (let line of lines) {
 	line.draw()
 }
 
-lines[0].minions = [...teamRed.minions, ...teamBlue.minions];
-console.log(lines[0].minions);
-for (let m of lines[0].minions) {
-	m.render();
-}
+
 var keysPressed = [];
 function processUserInput() {
 	console.table(keysPressed);
@@ -512,46 +518,23 @@ function processUserInput() {
 }
 
 
-
-var moveQueue = [];
-var fightQueue = [];
+for (let m of globalMinions) {
+	m.render();
+}
 
 function updateState() {
-	moveQueue = [];
-	fightQueue = [];
-	teamRed.removeDeadMinions();
-	teamBlue.removeDeadMinions();
-	let aliveMinions = [...teamRed.minions, ...teamBlue.minions];
-	console.table(aliveMinions);
-	console.info(teamRed.getMinionsUniqueRows());
+	removeDeadMinions();
+	globalMinions.sort((a, b) => b.movePriority - a.movePriority);
 
+	console.table(globalMinions);
 
-	teamRed.setMinionsFightModeByRangeToEnemyRow(teamBlue.getFarawayRow());
-	teamBlue.setMinionsFightModeByRangeToEnemyRow(teamRed.getFarawayRow());
-	let teamRedCurrentTurnAttack = teamRed.sumMinionsWithFightModeAttack();
-	let teamBlueCurrentTurnAttack = teamBlue.sumMinionsWithFightModeAttack();
-
-	for (let m of aliveMinions) {
+	for (let m of globalMinions) {
 		m.updateState();
 	}
-	if (fightQueue.length > 0) {
-		fightQueue = fightQueue.sort((a, b) => (b.absorbAttackPriority - a.absorbAttackPriority));
-		console.log("fightQueue table");
-		console.table(fightQueue);
-		let teamRedMinionToAbsorbAttack = fightQueue.find((x) => x.color == teamRed.teamData.color);
-		let teamBlueMinionToAbsorbAttack = fightQueue.find((x) => x.color == teamBlue.teamData.color);
 
-		teamRedMinionToAbsorbAttack.absorbAttack(teamBlueCurrentTurnAttack);
-		teamBlueMinionToAbsorbAttack.absorbAttack(teamRedCurrentTurnAttack);
+	for (let m of globalMinions) {
+		m.absorbAttack();
 	}
-
-	moveQueue = moveQueue.sort((a, b) => b.movePriority - a.movePriority);
-	console.table(moveQueue)
-	for (m of moveQueue) {
-		m.move();
-	}
-
-
 }
 
 function render() {
