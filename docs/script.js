@@ -29,6 +29,8 @@ class Rectangle {
 		this.y = y;
 		this.width = width;
 		this.height = height;
+		this.xCenter = this.x + (this.width / 2)
+		this.yCenter = this.y + (this.height / 2)
 		this.color = color;
 		this.strokeWidth = strokeWidth;
 		this.strokeColor = strokeColor;
@@ -104,6 +106,49 @@ class Rectangle {
 		let text = document.getElementById(`text-${this.x}${this.y}`);
 		if (text != null) {
 			this.svgLayer.removeChild(text);
+
+		}
+	}
+}
+
+class TargetLine {
+	constructor(x1, y1, x2, y2, customId, svgLayer = svgLayer0, color = "#CEDDE3", element = document.createElementNS("http://www.w3.org/2000/svg", "line")) {
+		this.svgLayer = svgLayer;
+		this.x1 = x1;
+		this.y1 = y1;
+		this.x2 = x2;
+		this.y2 = y2;
+		this.customId = `targetLine-${customId}`;
+		this.color = color;
+		this.element = element;
+
+		this.element.setAttribute("x1", x1);
+		this.element.setAttribute("y1", y1);
+		this.element.setAttribute("x2", x2);
+		this.element.setAttribute("y2", y2);
+		this.element.style.strokeWidth = 10;
+
+		this.element.style.stroke = "none";
+		this.element.id = this.customId;
+
+		document.addEventListener("keypress", (k) => {
+			if (k.key == "r") {
+				if (this.element.style.stroke == "none") {
+					this.element.style.stroke = this.color;
+				}
+				else {
+					this.element.style.stroke = "none";
+				}
+			}
+		});
+
+		this.svgLayer.appendChild(this.element);
+	}
+
+	remove() {
+		let line = document.getElementById(this.customId);
+		if (line != null) {
+			this.svgLayer.removeChild(line);
 
 		}
 	}
@@ -229,9 +274,11 @@ class Minion {
 	previousRow = 0;
 	movePriorityModifier = 10;
 	targetRow = null;
+	targetColumn = null;
 	customId = customIdIncrement();
 	movePriority = 0;
 	attackToAbsorb = 0;
+	targetLine = null;
 	constructor(row, column, direction = -1, team = TEAM_BLUE, enemyTeam = TEAM_RED, color = TEAM_BLUE_MINION_COLOR, lineOffset = 0, stats = new Stats(300, 25, 1)) {
 		this.row = row;
 		this.previousRow = row;
@@ -266,6 +313,7 @@ class Minion {
 
 	setTargetRow() {
 		this.targetRow = null;
+		this.targetColumn = null;
 		let minimumRange = 1;
 		for (let i = minimumRange; i <= this.stats.range; i++) {
 			if (this.row + (i * this.direction) > grid.length - 1 || this.row + (i * this.direction) < 0) {
@@ -294,6 +342,10 @@ class Minion {
 		}
 		targets.sort((a, b) => (b.maxHp / b.stats.hp + 1 / (b.column + 1) / 100) - (a.maxHp / a.stats.hp + 1 / (a.column + 1) / 100));
 		targets[0].attackToAbsorb = targets[0].attackToAbsorb + this.stats.attack;
+		this.targetColumn = targets[0].column;
+		let currentRectangle = grid[this.row][this.column];
+		let targetRectangle = grid[this.targetRow][this.targetColumn];
+		this.targetLine = new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRectangle.xCenter, targetRectangle.yCenter, this.customId, svgLayer0);
 	}
 
 	getSwapColumns() {
@@ -346,7 +398,7 @@ class Minion {
 		}
 		else {
 			if (grid[this.row + this.direction][this.column].getOccupiedBy() == this.team) {
-				this.swapColumn()
+				this.swapColumn();
 			}
 		}
 
@@ -365,6 +417,10 @@ class Minion {
 
 	updateState() {
 		console.log("Minion updateState");
+		if (this.targetLine != null) {
+			this.targetLine.remove();
+			this.targetLine = null;
+		}
 		if (this.setTargetRow() == null) {
 			this.move();
 			// workaround as red team moves first to be able to attack in the same turn
@@ -388,6 +444,10 @@ class Minion {
 		}
 		grid[this.previousRow][this.previousColumn].clear();
 		grid[this.previousRow][this.previousColumn].removeCustomId();
+		if (this.targetLine != null) {
+			this.targetLine.remove();
+			this.targetLine = null;
+		}
 		grid[this.row][this.column].draw(color);
 		grid[this.row][this.column].addCustomId(this.customId);
 		grid[this.row][this.column].clearText();
@@ -398,6 +458,10 @@ class Minion {
 		grid[this.row][this.column].clear();
 		grid[this.row][this.column].removeCustomId();
 		grid[this.row][this.column].clearText();
+		if (this.targetLine != null) {
+			this.targetLine.remove();
+			this.targetLine = null;
+		}
 	}
 
 }
