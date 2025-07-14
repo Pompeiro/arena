@@ -7,13 +7,16 @@ const COLUMNS_IN_LINE = 3;
 const TEAM_RED = "red";
 const TEAM_BLUE = "blue";
 const TEAM_RED_MINION_COLOR = "rgb(216, 167, 177)";
+const TEAM_RED_TOWER_COLOR = "rgb(236, 167, 177)";
 const TEAM_BLUE_MINION_COLOR = "rgb(176, 196, 222)";
+const TEAM_BLUE_TOWER_COLOR = "rgb(176, 196, 242)";
 
-const redTeamColors = [TEAM_RED_MINION_COLOR];
-const blueTeamColors = [TEAM_BLUE_MINION_COLOR];
+const redTeamColors = [TEAM_RED_MINION_COLOR, TEAM_RED_TOWER_COLOR];
+const blueTeamColors = [TEAM_BLUE_MINION_COLOR, TEAM_BLUE_TOWER_COLOR];
 
 var globalAllAttackableObjects = [];
 var globalMinions = [];
+var globalTowers = [];
 function removeDeadMinions() {
 	let previousLength = globalMinions.length;
 	globalMinions = globalMinions.filter((minion) => minion.stats.hp > 0);
@@ -198,10 +201,12 @@ class Circle {
 
 
 class TeamData {
-	constructor(color, direction, minionSpawnRow, team, enemyTeam) {
+	constructor(color, towerColor, direction, minionSpawnRow, towerSpawnRow, team, enemyTeam) {
 		this.color = color;
+		this.towerColor = towerColor;
 		this.direction = direction;
 		this.minionSpawnRow = minionSpawnRow;
+		this.towerSpawnRow = towerSpawnRow;
 		this.team = team;
 		this.enemyTeam = enemyTeam;
 	}
@@ -250,6 +255,10 @@ class Line {
 
 	spawnMinionsByTeam(team) {
 		team.spawnMinionsByLine(this);
+	}
+
+	spawnTowerByTeam(team) {
+		team.spawnTowerByLine(this);
 	}
 
 
@@ -337,7 +346,7 @@ class Minion {
 		for (let col of this.getEnemiesColumns()) {
 			if (grid[this.targetRow][this.column + col].getOccupiedBy() == this.enemyTeam) {
 				let targetId = grid[this.targetRow][this.column + col].getCustomId();
-				targets.push(globalMinions.find((x) => x.customId == targetId));
+				targets.push(globalAllAttackableObjects.find((x) => x.customId == targetId));
 			}
 		}
 		targets.sort((a, b) => (b.maxHp / b.stats.hp + 1 / (b.column + 1) / 100) - (a.maxHp / a.stats.hp + 1 / (a.column + 1) / 100));
@@ -466,6 +475,110 @@ class Minion {
 
 }
 
+class Tower {
+	targetRow = null;
+	targetColumn = null;
+	customId = customIdIncrement();
+	attackToAbsorb = 0;
+	targetLine = null;
+	constructor(row, column, direction, team, enemyTeam, color, stats = new Stats(1000, 50, 4)) {
+		this.row = row;
+		this.column = column;
+		this.direction = direction;
+		this.team = team;
+		this.enemyTeam = enemyTeam;
+		this.color = color;
+		this.stats = stats;
+	}
+
+
+	setTargetRow() {
+		this.targetRow = null;
+		this.targetColumn = null;
+		let minimumRange = 1;
+		for (let i = minimumRange; i <= this.stats.range; i++) {
+			if (this.row + (i * this.direction) > grid.length - 1 || this.row + (i * this.direction) < 0) {
+				//turn off searching outside grid
+				return this.targetRow;
+			}
+			for (let col of [-1, 1]) {
+				if (grid[this.row + (i * this.direction)][this.column + col].getOccupiedBy() == this.enemyTeam) {
+					this.targetRow = this.row + (i * this.direction);
+					console.error("found enemy row in range")
+					return this.targetRow;
+				}
+			}
+		}
+		return this.targetRow;
+	}
+
+	attackTargetRow() {
+		console.log("Attack lowest hp and most left column");
+		let targets = [];
+		for (let col of [-1, 0, 1]) {
+			if (grid[this.targetRow][this.column + col].getOccupiedBy() == this.enemyTeam) {
+				let targetId = grid[this.targetRow][this.column + col].getCustomId();
+				targets.push(globalAllAttackableObjects.find((x) => x.customId == targetId));
+			}
+		}
+		targets.sort((a, b) => (b.maxHp / b.stats.hp + 1 / (b.column + 1) / 100) - (a.maxHp / a.stats.hp + 1 / (a.column + 1) / 100));
+		targets[0].attackToAbsorb = targets[0].attackToAbsorb + this.stats.attack;
+		this.targetColumn = targets[0].column;
+		let currentRectangle = grid[this.row][this.column];
+		let targetRectangle = grid[this.targetRow][this.targetColumn];
+		this.targetLine = new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRectangle.xCenter, targetRectangle.yCenter, this.customId, svgLayer0);
+	}
+
+	absorbAttack() {
+		this.stats.hp = this.stats.hp - this.attackToAbsorb;
+		console.log("Minion absorbed attack", this.attackToAbsorb);
+		this.attackToAbsorb = 0;
+		if (this.stats.hp <= 0) {
+			this.clear();
+			return null;
+		}
+		this.render();
+	}
+
+	updateState() {
+		console.log("Tower updateState");
+		if (this.targetLine != null) {
+			this.targetLine.remove();
+			this.targetLine = null;
+		}
+		if (this.setTargetRow() != null) {
+			this.attackTargetRow();
+		}
+	}
+
+	render(text = `hp:${this.stats.hp}`) {
+		if (this.targetRow != null) {
+			grid[this.row][this.column].clearText();
+			grid[this.row][this.column].addText(text);
+			return null;
+		}
+		if (this.targetLine != null) {
+			this.targetLine.remove();
+			this.targetLine = null;
+		}
+
+		grid[this.row][this.column].draw(this.color);
+		grid[this.row][this.column].addCustomId(this.customId);
+		grid[this.row][this.column].clearText();
+		grid[this.row][this.column].addText(text);
+	}
+
+	clear() {
+		grid[this.row][this.column].clear();
+		grid[this.row][this.column].removeCustomId();
+		grid[this.row][this.column].clearText();
+		if (this.targetLine != null) {
+			this.targetLine.remove();
+			this.targetLine = null;
+		}
+	}
+}
+
 class Team {
 	constructor(teamData) {
 		this.teamData = teamData;
@@ -474,14 +587,14 @@ class Team {
 	spawnMinions(amount) {
 		for (let i = 0; i < amount; i++) {
 			globalMinions.push(new Minion(this.teamData.minionSpawnRow, i, this.teamData.direction, this.teamData.team, this.teamData.enemyTeam, this.teamData.color, 0));
-			console.log("Team:", this.teamData.color, "Spawned minion, minions:", globalMinions)
+			console.log("Team:", this.teamData.color, "Spawned minion, minions:", globalMinions);
 		}
 	}
 
 	spawnMinionsByRow(row, amount) {
 		for (let i = 0; i < amount; i++) {
 			globalMinions.push(new Minion(row, i, this.teamData.direction, this.teamData.team, this.teamData.enemyTeam, this.teamData.color, 0));
-			console.log("Team:", this.teamData.color, "Spawned minion, minions:", globalMinions)
+			console.log("Team:", this.teamData.color, "Spawned minion, minions:", globalMinions);
 		}
 	}
 
@@ -489,8 +602,14 @@ class Team {
 		for (let i = 0; i < amount; i++) {
 			let spawnedMinion = new Minion(this.teamData.minionSpawnRow, line.columnStartingPoint + i, this.teamData.direction, this.teamData.team, this.teamData.enemyTeam, this.teamData.color, line.columnStartingPoint);
 			globalMinions.push(spawnedMinion);
-			console.log("Team:", this.teamData.color, "Spawned minion, minions:", globalMinions)
+			console.log("Team:", this.teamData.color, "Spawned minion, minions:", globalMinions);
 		}
+	}
+
+	spawnTowerByLine(line) {
+		let spawnedTower = new Tower(this.teamData.towerSpawnRow, line.columnStartingPoint + 1, this.teamData.direction, this.teamData.team, this.teamData.enemyTeam, this.teamData.towerColor);
+		globalTowers.push(spawnedTower);
+		console.log("Team:", this.teamData.color, "Spawned tower");
 	}
 
 }
@@ -523,16 +642,16 @@ for (let gridRow of grid) {
 		gridCol.drawBorder();
 	}
 }
-let teamRedData = new TeamData(TEAM_RED_MINION_COLOR, 1, 0, TEAM_RED, TEAM_BLUE);
-let teamBlueData = new TeamData(TEAM_BLUE_MINION_COLOR, -1, grid.length - 1, TEAM_BLUE, TEAM_RED);
+let teamRedData = new TeamData(TEAM_RED_MINION_COLOR, TEAM_RED_TOWER_COLOR, 1, 1, 0, TEAM_RED, TEAM_BLUE);
+let teamBlueData = new TeamData(TEAM_BLUE_MINION_COLOR, TEAM_BLUE_TOWER_COLOR, -1, grid.length - 1 - 1, grid.length - 1 - 0, TEAM_BLUE, TEAM_RED);
 
 let teamRed = new Team(teamRedData)
 teamRed.spawnMinions(1);
 
 let teamBlue = new Team(teamBlueData)
 
-teamBlue.spawnMinionsByRow(2, 2);
-teamBlue.spawnMinionsByRow(3, 3);
+teamBlue.spawnMinionsByRow(3, 2);
+teamBlue.spawnMinionsByRow(4, 3);
 
 const lines = [];
 const amountOfLines = 3;
@@ -553,6 +672,13 @@ lines[1].spawnMinionsByTeam(teamRed);
 
 lines[2].spawnMinionsByTeam(teamRed);
 lines[2].spawnMinionsByTeam(teamBlue);
+
+for (let line of lines) {
+	line.spawnTowerByTeam(teamRed);
+	line.spawnTowerByTeam(teamBlue);
+}
+
+
 //const tower = grid[1][6]
 
 //const towerCircle = new Circle(cx = tower.x + gridRectangleWidth / 2, cy = tower.y + gridRectangleHeight / 2, r = gridRectangleWidth / 2 * 3)
@@ -585,19 +711,23 @@ function processUserInput() {
 for (let m of globalMinions) {
 	m.render();
 }
+for (let t of globalTowers) {
+	t.render();
+}
 
 function updateState() {
 	removeDeadMinions();
 	globalMinions.sort((a, b) => b.movePriority - a.movePriority);
+	globalAllAttackableObjects.push(...globalMinions, ...globalTowers)
 
 	console.table(globalMinions);
 
-	for (let m of globalMinions) {
-		m.updateState();
+	for (let o of globalAllAttackableObjects) {
+		o.updateState();
 	}
 
-	for (let m of globalMinions) {
-		m.absorbAttack();
+	for (let o of globalAllAttackableObjects) {
+		o.absorbAttack();
 	}
 }
 
