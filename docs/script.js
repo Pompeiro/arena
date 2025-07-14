@@ -29,6 +29,8 @@ class Rectangle {
 		this.y = y;
 		this.width = width;
 		this.height = height;
+		this.xCenter = this.x + (this.width / 2)
+		this.yCenter = this.y + (this.height / 2)
 		this.color = color;
 		this.strokeWidth = strokeWidth;
 		this.strokeColor = strokeColor;
@@ -343,8 +345,7 @@ class Minion {
 		this.targetColumn = targets[0].column;
 		let currentRectangle = grid[this.row][this.column];
 		let targetRectangle = grid[this.targetRow][this.targetColumn];
-		this.targetLine = new TargetLine(currentRectangle.x + (currentRectangle.width / 2), currentRectangle.y + (currentRectangle.height / 2), targetRectangle.x + (targetRectangle.width / 2), targetRectangle.y + (targetRectangle.height / 2), this.customId, svgLayer0);
-
+		this.targetLine = new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRectangle.xCenter, targetRectangle.yCenter, this.customId, svgLayer0);
 	}
 
 	getSwapColumns() {
