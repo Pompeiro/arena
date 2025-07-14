@@ -616,7 +616,7 @@ function gameLoop() {
 }
 
 const help = document.getElementById("help");
-const helpBase = "Press ctrl to trigger game loop, A to move"
+const helpBase = "Press ctrl to trigger game loop, R to toggle target"
 help.textContent = `${helpBase} list of keys pressed: ${keysPressed}`
 document.addEventListener("keydown", (k) => {
 	if (k.key == "Control") {
