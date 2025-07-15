@@ -1,3 +1,5 @@
+const DEBUG_MODE = true;
+
 const svgLayer0 = document.getElementById("layer-0");
 const svgLayer1 = document.getElementById("layer-1");
 const svgLayer2 = document.getElementById("layer-2");
@@ -11,19 +13,151 @@ const TEAM_RED_TOWER_COLOR = "rgb(236, 167, 177)";
 const TEAM_BLUE_MINION_COLOR = "rgb(176, 196, 222)";
 const TEAM_BLUE_TOWER_COLOR = "rgb(176, 196, 242)";
 
+
 const redTeamColors = [TEAM_RED_MINION_COLOR, TEAM_RED_TOWER_COLOR];
 const blueTeamColors = [TEAM_BLUE_MINION_COLOR, TEAM_BLUE_TOWER_COLOR];
 
 var globalAllAttackableObjects = [];
 var globalMinions = [];
 var globalTowers = [];
+var globalDebugCircles = [];
+var globalDebugLines = [];
+
 function removeDeadMinions() {
+
 	let previousLength = globalMinions.length;
 	globalMinions = globalMinions.filter((minion) => minion.stats.hp > 0);
 	if (previousLength < globalMinions.length) {
 		console.log("Removed minions count:", previousLength - globalMinions.length);
 	}
 }
+
+
+function removeDebugArtifacts() {
+	if (DEBUG_MODE == false) {
+		return null;
+	}
+
+	for (let d of globalDebugCircles) {
+		d.remove();
+	}
+
+	for (let d of globalDebugLines) {
+		d.remove();
+	}
+
+	globalDebugCircles = [];
+	globalDebugLines = [];
+
+}
+
+const debugCall = document.getElementById("debugCall");
+const debugInfo = document.getElementById("debugInfo");
+const debugReturn = document.getElementById("debugReturn");
+/**
+ * @function get possible swap columns
+ * @param {number} column
+ * @param {number} lineOffset 
+ * @returns {number[]} swapColumns 
+ */
+function getSwapColumns(column, lineOffset) {
+	let swapColumns = [];
+	switch ((column - lineOffset) % 3) {
+		case 0:
+			swapColumns = [1, 2];
+			break;
+		case 1:
+			swapColumns = [-1, 1];
+			break;
+		case 2:
+			swapColumns = [-2, -1];
+			break;
+	}
+	return swapColumns;
+}
+/**
+ * @function as forward rectangle is occupied by same team, try to swap column
+ * @param {number} row
+ * @param {number} column
+ * @param {number} direction
+ * @param {number} lineOffset 
+ * @returns {Point} point
+ */
+function swapColumn(row, column, direction, lineOffset) {
+	console.log("Checking remaining columns in width 3 line");
+
+	let currentRectangle = grid[row][column];
+	let targetRow = row + direction;
+	for (let i of getSwapColumns(column, lineOffset)) {
+		if (grid[targetRow][column + i].getOccupiedBy() == "none") {
+			let targetRectangle = grid[targetRow][column + 1];
+			console.log("Found free column, pushing minion forward");
+			if (DEBUG_MODE == true) {
+				debugCall.textContent = `swapColumn called with row: ${row}, column: ${column}, direction: ${direction}`;
+				debugInfo.textContent = `targetRow: ${targetRow}, target column: ${column + i}, current i: ${i}`;
+
+				let globalDebugLine = new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRectangle.xCenter, targetRectangle.yCenter, `debugline${customIdIncrement()}`, svgLayer0);
+				globalDebugLine.draw();
+				globalDebugLines.push(globalDebugLine);
+			}
+			return { row: targetRow, column: column + i };
+		}
+	}
+
+	console.error("Cant move forward, forward row is occupied");
+	return { row: row, column: column };
+}
+
+/**
+ * Row and Column together.
+ * @typedef {Object} Point
+ * @property {number} row
+ * @property {number} column
+ */
+
+const point = { row: 50, column: 50 }
+
+/**
+	* Moves rectangle forward.
+	* @function
+	* @param {number} row
+	* @param {number} column
+	* @param {number} direction
+	* @param {string} team
+	* @param {number} lineOffset 
+	* @returns {Point} point
+	*/
+function move(row, column, direction, team, lineOffset) {
+	let currentRectangle = grid[row][column];
+	let targetRow = row + direction;
+
+	if (targetRow > grid.length - 1 || targetRow < 0) {
+		console.error("Grid Border has been reached!");
+		return { row: row, column: column };
+	}
+	let targetRectangle = grid[targetRow][column];
+
+	if (DEBUG_MODE == true) {
+		debugCall.textContent = `Move called with row: ${row}, column: ${column}, direction: ${direction}`;
+		debugInfo.textContent = `targetRow: ${targetRow}, targetRow  > grid.length - 1: ${targetRow > grid.length - 1}, targetRow < 0: ${targetRow < 0}`;
+		let globalDebugCircle = new Circle(currentRectangle.xCenter, currentRectangle.yCenter, 30);
+		globalDebugCircle.drawBorder();
+		globalDebugCircles.push(globalDebugCircles);
+		let globalDebugLine = new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRectangle.xCenter, targetRectangle.yCenter, `debugline${customIdIncrement()}`, svgLayer0, color = "#CEDDDD")
+		globalDebugLine.draw();
+		globalDebugLines.push(globalDebugLine);
+	}
+
+	if (grid[targetRow][column].getOccupiedBy() == "none") {
+		return { row: targetRow, column: column };
+	}
+	else {
+		if (grid[targetRow][column].getOccupiedBy() == team) {
+			return swapColumn(row, column, direction, lineOffset);
+		}
+	}
+}
+
 
 class Rectangle {
 	constructor(x, y, width, height, svgLayer = svgLayer0, color = "#8CA8B8", strokeWidth = 4, strokeColor = "#D6CFC7", element = document.createElementNS("http://www.w3.org/2000/svg", "rect")) {
@@ -97,7 +231,7 @@ class Rectangle {
 
 	addText(text) {
 		let textElement = document.createElementNS("http://www.w3.org/2000/svg", "text");
-		textElement.id = `text-${this.x}${this.y}`;
+		textElement.id = `text - ${this.x}${this.y} `;
 		textElement.setAttribute("x", this.x + 20);
 		textElement.setAttribute("y", this.y + 20);
 		textElement.style.fontSize = 15;
@@ -106,7 +240,7 @@ class Rectangle {
 		this.svgLayer.appendChild(textElement);
 	}
 	clearText() {
-		let text = document.getElementById(`text-${this.x}${this.y}`);
+		let text = document.getElementById(`text - ${this.x}${this.y} `);
 		if (text != null) {
 			this.svgLayer.removeChild(text);
 
@@ -121,7 +255,7 @@ class TargetLine {
 		this.y1 = y1;
 		this.x2 = x2;
 		this.y2 = y2;
-		this.customId = `targetLine-${customId}`;
+		this.customId = `targetLine - ${customId} `;
 		this.color = color;
 		this.element = element;
 
@@ -148,17 +282,20 @@ class TargetLine {
 		this.svgLayer.appendChild(this.element);
 	}
 
+	draw() {
+		this.element.style.stroke = this.color;
+	}
+
 	remove() {
 		let line = document.getElementById(this.customId);
 		if (line != null) {
 			this.svgLayer.removeChild(line);
-
 		}
 	}
 }
 
 class Circle {
-	constructor(cx, cy, r, svgLayer = svgLayer1, color = "#C1B7A4", element = document.createElementNS("http://www.w3.org/2000/svg", "circle")) {
+	constructor(cx, cy, r, svgLayer = svgLayer0, color = "#C1B7A4", element = document.createElementNS("http://www.w3.org/2000/svg", "circle")) {
 		this.svgLayer = svgLayer;
 		this.cx = cx;
 		this.cy = cy;
@@ -194,7 +331,11 @@ class Circle {
 		this.element.style.fill = "none";
 
 		this.element.style.stroke = "#D6CFC7";
-		this.element.style.strokeWidth = this.strokeWidth;
+		this.element.style.strokeWidth = 10;
+	}
+
+	remove() {
+		this.svgLayer.removeChild(this.element);
 	}
 
 }
@@ -275,7 +416,7 @@ class Stats {
 var customId = 0;
 function customIdIncrement() {
 	customId++;
-	return `${customId}`;
+	return `${customId} `;
 }
 
 
@@ -356,7 +497,16 @@ class Minion {
 		let targetRectangle = grid[this.targetRow][this.targetColumn];
 		this.targetLine = new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRectangle.xCenter, targetRectangle.yCenter, this.customId, svgLayer0);
 	}
-
+	/**
+		* @function sets row and column by Point object, sets previousRow and previousColumn
+		* @param {Point} point
+		*/
+	setRowAndColumn(point) {
+		this.previousRow = this.row;
+		this.previousColumn = this.column;
+		this.row = point.row;
+		this.column = point.column;
+	}
 	getSwapColumns() {
 		let swapColumns = [];
 		switch ((this.column - this.lineOffset) % 3) {
@@ -445,7 +595,7 @@ class Minion {
 		this.setMovePriority();
 	}
 
-	render(color = this.color, text = `hp:${this.stats.hp}`) {
+	render(color = this.color, text = `hp:${this.stats.hp} `) {
 		if (this.targetRow != null) {
 			grid[this.row][this.column].clearText();
 			grid[this.row][this.column].addText(text);
@@ -551,7 +701,7 @@ class Tower {
 		}
 	}
 
-	render(text = `hp:${this.stats.hp}`) {
+	render(text = `hp:${this.stats.hp} `) {
 		if (this.targetRow != null) {
 			grid[this.row][this.column].clearText();
 			grid[this.row][this.column].addText(text);
@@ -721,6 +871,9 @@ function updateState() {
 	globalAllAttackableObjects.push(...globalMinions, ...globalTowers)
 
 	console.table(globalMinions);
+	for (let m of globalMinions) {
+		move(m.row, m.column, m.direction, m.team, m.lineOffset)
+	}
 
 	for (let o of globalAllAttackableObjects) {
 		o.updateState();
@@ -747,16 +900,16 @@ function gameLoop() {
 
 const help = document.getElementById("help");
 const helpBase = "Press ctrl to trigger game loop, R to toggle target"
-help.textContent = `${helpBase} list of keys pressed: ${keysPressed}`
+help.textContent = `${helpBase} list of keys pressed: ${keysPressed} `
 document.addEventListener("keydown", (k) => {
 	if (k.key == "Control") {
 		gameLoop();
 		keysPressed = [];
-		help.textContent = `${helpBase} list of keys pressed: ${keysPressed}`
+		help.textContent = `${helpBase} list of keys pressed: ${keysPressed} `
 	}
 	else {
 		keysPressed.push(k.key);
-		help.textContent = `${helpBase} list of keys pressed: ${keysPressed}`
+		help.textContent = `${helpBase} list of keys pressed: ${keysPressed} `
 	}
 });
 
