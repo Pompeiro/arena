@@ -54,6 +54,109 @@ function removeDebugArtifacts() {
 const debugCall = document.getElementById("debugCall");
 const debugInfo = document.getElementById("debugInfo");
 const debugReturn = document.getElementById("debugReturn");
+
+/**
+ * @function getEnemiesColumns
+ * @param {number} column
+ * @param {number} lineOffset
+ * @returns {number[]} enemiesColumns
+ */
+function getEnemiesColumns(column, lineOffset) {
+	let enemiesColumns = [];
+	switch ((column - lineOffset) % 3) {
+		case 0:
+			enemiesColumns = [0, 1, 2];
+			break;
+		case 1:
+			enemiesColumns = [-1, 0, 1];
+			break;
+		case 2:
+			enemiesColumns = [-2, -1, 0];
+			break;
+	}
+	return enemiesColumns;
+}
+
+
+/**
+ * @function setTargetRow
+ * @param {number} row
+ * @param {number} column
+ * @param {number} direction 
+ * @param {number} range
+ * @param {number} lineOffset
+ * @param {string} enemyTeam
+ * @returns {number|null}
+ */
+function getTargetRow(row, column, direction, range, lineOffset, enemyTeam) {
+	let targetRow = null;
+	let minimumRange = 1;
+	let enemiesColumns = getEnemiesColumns(column, lineOffset)
+	let currentRectangle = grid[row][column];
+
+	for (let i = minimumRange; i <= range; i++) {
+		if (row + (i * direction) > grid.length - 1 || row + (i * direction) < 0) {
+			//turn off searching outside grid
+			return targetRow;
+		}
+
+		if (DEBUG_MODE == true) {
+			debugCall.textContent = `setTargetRow called with row: ${row}, column: ${column}, direction: ${direction}, range: ${range}, lineOffset: ${lineOffset}, enemyTeam: ${enemyTeam}`;
+			debugInfo.textContent = `i: ${i}, minimum range: ${minimumRange}, enemiesColumns: ${enemiesColumns}, row + (i * direction): ${row + (i * direction)},
+ column  + enemiesColumns[0]: ${column + enemiesColumns[0]}`;
+			let targetRowRectangleStart = grid[row + (i * direction)][column + enemiesColumns[0]];
+			let targetRowRectangleEnd = grid[row + (i * direction)][column + enemiesColumns[enemiesColumns.length - 1]];
+			console.error({ targetRowRectangleStart })
+			let globalDebugCircle = new Circle(currentRectangle.xCenter, currentRectangle.yCenter, 10, svgLayer0, "#BC8F8F");
+			globalDebugCircle.drawBorder();
+			let globalDebugLineRow = new TargetLine(targetRowRectangleStart.xCenter, targetRowRectangleStart.yCenter, targetRowRectangleEnd.xCenter, targetRowRectangleEnd.yCenter, `debugline${customIdIncrement()}`, svgLayer0, "#BC8F8F")
+			globalDebugLineRow.draw();
+			let globalDebugLine = new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRowRectangleEnd.xCenter, targetRowRectangleEnd.yCenter, `debugline${customIdIncrement()}`, svgLayer0, "#BC8F8F")
+			globalDebugLine.draw();
+
+			globalDebugCircle.remove();
+			globalDebugLineRow.remove();
+			globalDebugLine.remove();
+		}
+
+		for (let col of enemiesColumns) {
+			if (grid[row + (i * direction)][column + col].getOccupiedBy() == enemyTeam) {
+				targetRow = row + (i * direction);
+				return targetRow;
+			}
+		}
+	}
+	return targetRow;
+}
+
+/**
+ * @function attackTargetRow
+ * @param {number} row 
+ * @param {number} column
+ * @param {number} lineOffset 
+ * @param {number} targetRow
+ * @param {number} customId
+ * @returns {number} targetColumn
+ */
+function attackTargetRow(row, column, lineOffset, targetRow, customId, attack, enemyTeam) {
+	console.log("Attack lowest hp and most left column");
+	let enemiesColumns = getEnemiesColumns(column, lineOffset)
+	let targets = [];
+	for (let col of enemiesColumns) {
+		if (grid[targetRow][column + col].getOccupiedBy() == enemyTeam) {
+			let targetId = grid[targetRow][column + col].getCustomId();
+			targets.push(globalAllAttackableObjects.find((x) => x.customId == targetId));
+		}
+	}
+	targets.sort((a, b) => (b.maxHp / b.stats.hp + 1 / (b.column + 1) / 100) - (a.maxHp / a.stats.hp + 1 / (a.column + 1) / 100));
+	targets[0].attackToAbsorb = targets[0].attackToAbsorb + attack;
+	let targetColumn = targets[0].column;
+	let currentRectangle = grid[row][column];
+	let targetRectangle = grid[targetRow][targetColumn];
+	new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRectangle.xCenter, targetRectangle.yCenter, customId, svgLayer0);
+	return targetColumn;
+}
+
 /**
  * @function get possible swap columns
  * @param {number} column
@@ -90,7 +193,7 @@ function swapColumn(row, column, direction, lineOffset) {
 	let targetRow = row + direction;
 	for (let i of getSwapColumns(column, lineOffset)) {
 		if (grid[targetRow][column + i].getOccupiedBy() == "none") {
-			let targetRectangle = grid[targetRow][column + 1];
+			let targetRectangle = grid[targetRow][column + i];
 			console.log("Found free column, pushing minion forward");
 			if (DEBUG_MODE == true) {
 				debugCall.textContent = `swapColumn called with row: ${row}, column: ${column}, direction: ${direction}`;
@@ -138,12 +241,12 @@ function move(row, column, direction, team, lineOffset) {
 	let targetRectangle = grid[targetRow][column];
 
 	if (DEBUG_MODE == true) {
-		debugCall.textContent = `Move called with row: ${row}, column: ${column}, direction: ${direction}`;
+		debugCall.textContent = `Move called with row: ${row}, column: ${column}, direction: ${direction}, team: ${team}, lineOffset: ${lineOffset}`;
 		debugInfo.textContent = `targetRow: ${targetRow}, targetRow  > grid.length - 1: ${targetRow > grid.length - 1}, targetRow < 0: ${targetRow < 0}`;
 		let globalDebugCircle = new Circle(currentRectangle.xCenter, currentRectangle.yCenter, 30);
 		globalDebugCircle.drawBorder();
 		globalDebugCircles.push(globalDebugCircles);
-		let globalDebugLine = new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRectangle.xCenter, targetRectangle.yCenter, `debugline${customIdIncrement()}`, svgLayer0, color = "#CEDDDD")
+		let globalDebugLine = new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRectangle.xCenter, targetRectangle.yCenter, `debugline${customIdIncrement()}`, svgLayer0, "#AAAAAA")
 		globalDebugLine.draw();
 		globalDebugLines.push(globalDebugLine);
 	}
@@ -156,6 +259,8 @@ function move(row, column, direction, team, lineOffset) {
 			return swapColumn(row, column, direction, lineOffset);
 		}
 	}
+	let cantMoveTargetRowEnemySpotted = { row: row, column: column };
+	return cantMoveTargetRowEnemySpotted;
 }
 
 
@@ -443,124 +548,23 @@ class Minion {
 		this.maxHp = this.stats.hp;
 	}
 
-	getEnemiesColumns() {
-		let enemiesColumns = [];
-		switch ((this.column - this.lineOffset) % 3) {
-			case 0:
-				enemiesColumns = [0, 1, 2];
-				break;
-			case 1:
-				enemiesColumns = [-1, 0, 1];
-				break;
-			case 2:
-				enemiesColumns = [-2, -1, 0];
-				break;
-		}
-		return enemiesColumns;
-	}
 
 
 
-	setTargetRow() {
-		this.targetRow = null;
-		this.targetColumn = null;
-		let minimumRange = 1;
-		for (let i = minimumRange; i <= this.stats.range; i++) {
-			if (this.row + (i * this.direction) > grid.length - 1 || this.row + (i * this.direction) < 0) {
-				//turn off searching outside grid
-				return this.targetRow;
-			}
-			for (let col of this.getEnemiesColumns()) {
-				if (grid[this.row + (i * this.direction)][this.column + col].getOccupiedBy() == this.enemyTeam) {
-					this.targetRow = this.row + (i * this.direction);
-					console.error("found enemy row in range")
-					return this.targetRow;
-				}
-			}
-		}
-		return this.targetRow;
-	}
-
-	attackTargetRow() {
-		console.log("Attack lowest hp and most left column");
-		let targets = [];
-		for (let col of this.getEnemiesColumns()) {
-			if (grid[this.targetRow][this.column + col].getOccupiedBy() == this.enemyTeam) {
-				let targetId = grid[this.targetRow][this.column + col].getCustomId();
-				targets.push(globalAllAttackableObjects.find((x) => x.customId == targetId));
-			}
-		}
-		targets.sort((a, b) => (b.maxHp / b.stats.hp + 1 / (b.column + 1) / 100) - (a.maxHp / a.stats.hp + 1 / (a.column + 1) / 100));
-		targets[0].attackToAbsorb = targets[0].attackToAbsorb + this.stats.attack;
-		this.targetColumn = targets[0].column;
-		let currentRectangle = grid[this.row][this.column];
-		let targetRectangle = grid[this.targetRow][this.targetColumn];
-		this.targetLine = new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRectangle.xCenter, targetRectangle.yCenter, this.customId, svgLayer0);
-	}
 	/**
 		* @function sets row and column by Point object, sets previousRow and previousColumn
 		* @param {Point} point
 		*/
 	setRowAndColumn(point) {
+		console.error(point);
 		this.previousRow = this.row;
 		this.previousColumn = this.column;
 		this.row = point.row;
 		this.column = point.column;
 	}
-	getSwapColumns() {
-		let swapColumns = [];
-		switch ((this.column - this.lineOffset) % 3) {
-			case 0:
-				swapColumns = [1, 2];
-				break;
-			case 1:
-				swapColumns = [-1, 1];
-				break;
-			case 2:
-				swapColumns = [-2, -1];
-				break;
-		}
-		return swapColumns;
-	}
-
-	swapColumn() {
-		console.log("Checking remaining columns in width 3 line");
-		for (let i of this.getSwapColumns()) {
-			if (grid[this.row + this.direction][this.column + i].getOccupiedBy() == "none") {
-				this.previousRow = this.row;
-				this.previousColumn = this.column;
-				this.row = this.row + this.direction
-				this.column = this.column + i
-				this.render();
-				this.previousColumn = this.column;
-				console.log("Found free column, pushing minion forward");
-				return true;
-			}
-		}
-		console.error("Cant move forward, forward row is occupied");
-	}
 
 	setMovePriority() {
 		this.movePriority = this.movePriorityModifier + this.row * this.direction;
-	}
-
-	move() {
-		console.log("Minion move");
-		if (this.row + this.direction > grid.length - 1 || this.row + this.direction < 0) {
-			console.error("Grid Border has been reached!")
-			return null;
-		}
-		if (grid[this.row + this.direction][this.column].getOccupiedBy() == "none") {
-			this.previousRow = this.row;
-			this.row = this.row + this.direction;
-			this.render();
-		}
-		else {
-			if (grid[this.row + this.direction][this.column].getOccupiedBy() == this.team) {
-				this.swapColumn();
-			}
-		}
-
 	}
 
 	absorbAttack() {
@@ -580,18 +584,19 @@ class Minion {
 			this.targetLine.remove();
 			this.targetLine = null;
 		}
-		if (this.setTargetRow() == null) {
-			this.move();
-			// workaround as red team moves first to be able to attack in the same turn
-			if (this.team == TEAM_RED) {
-				if (this.setTargetRow() != null) {
-					this.attackTargetRow();
-				}
-			}
+		this.targetRow = getTargetRow(this.row, this.column, this.direction, this.stats.range, this.lineOffset, this.enemyTeam);
+		if (this.targetRow == null) {
+			this.setRowAndColumn(move(this.row, this.column, this.direction, this.team, this.lineOffset));
+			this.render();
 		}
-		else {
-			this.attackTargetRow();
+		if (this.team == TEAM_RED) {
+			// red need to reevaluate that according to move priority to enable simultaneous fight
+			this.targetRow = getTargetRow(this.row, this.column, this.direction, this.stats.range, this.lineOffset, this.enemyTeam);
 		}
+		if (this.targetRow != null) {
+			attackTargetRow(this.row, this.column, this.lineOffset, this.targetRow, this.customId, this.stats.attack, this.enemyTeam);
+		}
+
 		this.setMovePriority();
 	}
 
@@ -638,50 +643,13 @@ class Tower {
 		this.team = team;
 		this.enemyTeam = enemyTeam;
 		this.color = color;
+		this.lineOffset = this.column - 1;
 		this.stats = stats;
-	}
-
-
-	setTargetRow() {
-		this.targetRow = null;
-		this.targetColumn = null;
-		let minimumRange = 1;
-		for (let i = minimumRange; i <= this.stats.range; i++) {
-			if (this.row + (i * this.direction) > grid.length - 1 || this.row + (i * this.direction) < 0) {
-				//turn off searching outside grid
-				return this.targetRow;
-			}
-			for (let col of [-1, 1]) {
-				if (grid[this.row + (i * this.direction)][this.column + col].getOccupiedBy() == this.enemyTeam) {
-					this.targetRow = this.row + (i * this.direction);
-					console.error("found enemy row in range")
-					return this.targetRow;
-				}
-			}
-		}
-		return this.targetRow;
-	}
-
-	attackTargetRow() {
-		console.log("Attack lowest hp and most left column");
-		let targets = [];
-		for (let col of [-1, 0, 1]) {
-			if (grid[this.targetRow][this.column + col].getOccupiedBy() == this.enemyTeam) {
-				let targetId = grid[this.targetRow][this.column + col].getCustomId();
-				targets.push(globalAllAttackableObjects.find((x) => x.customId == targetId));
-			}
-		}
-		targets.sort((a, b) => (b.maxHp / b.stats.hp + 1 / (b.column + 1) / 100) - (a.maxHp / a.stats.hp + 1 / (a.column + 1) / 100));
-		targets[0].attackToAbsorb = targets[0].attackToAbsorb + this.stats.attack;
-		this.targetColumn = targets[0].column;
-		let currentRectangle = grid[this.row][this.column];
-		let targetRectangle = grid[this.targetRow][this.targetColumn];
-		this.targetLine = new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRectangle.xCenter, targetRectangle.yCenter, this.customId, svgLayer0);
 	}
 
 	absorbAttack() {
 		this.stats.hp = this.stats.hp - this.attackToAbsorb;
-		console.log("Minion absorbed attack", this.attackToAbsorb);
+		console.log("Tower absorbed attack", this.attackToAbsorb);
 		this.attackToAbsorb = 0;
 		if (this.stats.hp <= 0) {
 			this.clear();
@@ -696,8 +664,9 @@ class Tower {
 			this.targetLine.remove();
 			this.targetLine = null;
 		}
-		if (this.setTargetRow() != null) {
-			this.attackTargetRow();
+		this.targetRow = getTargetRow(this.row, this.column, this.direction, this.stats.range, this.lineOffset, this.enemyTeam);
+		if (this.targetRow != null) {
+			attackTargetRow(this.row, this.column, this.lineOffset, this.targetRow, this.customId, this.stats.attack, this.enemyTeam);
 		}
 	}
 
@@ -868,12 +837,10 @@ for (let t of globalTowers) {
 function updateState() {
 	removeDeadMinions();
 	globalMinions.sort((a, b) => b.movePriority - a.movePriority);
+	globalAllAttackableObjects = [];
 	globalAllAttackableObjects.push(...globalMinions, ...globalTowers)
 
 	console.table(globalMinions);
-	for (let m of globalMinions) {
-		move(m.row, m.column, m.direction, m.team, m.lineOffset)
-	}
 
 	for (let o of globalAllAttackableObjects) {
 		o.updateState();
