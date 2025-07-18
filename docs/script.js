@@ -1,4 +1,5 @@
 const DEBUG_MODE = true;
+const SPAWN = true;
 
 const svgLayer0 = document.getElementById("layer-0");
 const svgLayer1 = document.getElementById("layer-1");
@@ -12,10 +13,11 @@ const TEAM_RED_MINION_COLOR = "rgb(216, 167, 177)";
 const TEAM_RED_TOWER_COLOR = "rgb(236, 167, 177)";
 const TEAM_BLUE_MINION_COLOR = "rgb(176, 196, 222)";
 const TEAM_BLUE_TOWER_COLOR = "rgb(176, 196, 242)";
+const TEAM_BLUE_HERO_COLOR = "rgb(127, 155, 174)";
 
 
 const redTeamColors = [TEAM_RED_MINION_COLOR, TEAM_RED_TOWER_COLOR];
-const blueTeamColors = [TEAM_BLUE_MINION_COLOR, TEAM_BLUE_TOWER_COLOR];
+const blueTeamColors = [TEAM_BLUE_MINION_COLOR, TEAM_BLUE_TOWER_COLOR, TEAM_BLUE_HERO_COLOR];
 
 var globalAllAttackableObjects = [];
 var globalMinions = [];
@@ -24,14 +26,19 @@ var globalDebugCircles = [];
 var globalDebugLines = [];
 
 function removeDeadMinions() {
-
 	let previousLength = globalMinions.length;
 	globalMinions = globalMinions.filter((minion) => minion.stats.hp > 0);
 	if (previousLength < globalMinions.length) {
 		console.log("Removed minions count:", previousLength - globalMinions.length);
 	}
 }
-
+function removeDeadTowers() {
+	let previousLength = globalTowers.length;
+	globalTowers = globalTowers.filter((minion) => minion.stats.hp > 0);
+	if (previousLength < globalTowers.length) {
+		console.log("Removed minions count:", previousLength - globalTowers.length);
+	}
+}
 
 function removeDebugArtifacts() {
 	if (DEBUG_MODE == false) {
@@ -263,6 +270,41 @@ function move(row, column, direction, team, lineOffset) {
 	return cantMoveTargetRowEnemySpotted;
 }
 
+/**
+	* Moves rectangle column.
+	* @function
+	* @param {number} row
+	* @param {number} column
+	* @param {number} columnDirection
+	* @returns {Point} point
+	*/
+function moveColumn(row, column, columnDirection) {
+	let currentRectangle = grid[row][column];
+	let targetColumn = column + columnDirection;
+
+	if (targetColumn > grid[0].length - 1 || targetColumn < 0) {
+		console.error("Grid Border has been reached!");
+		return { row: row, column: column };
+	}
+	let targetRectangle = grid[row][targetColumn];
+
+	if (DEBUG_MODE == true) {
+		debugCall.textContent = `moveColumn called with row: ${row}, column: ${column}, columnDirection: ${columnDirection}`;
+		debugInfo.textContent = `targetColumn: ${targetColumn}, targetColumn > grid[0].length - 1: ${targetColumn > grid[0].length - 1}, targetColumn < 0: ${targetColumn < 0}`;
+		let globalDebugCircle = new Circle(currentRectangle.xCenter, currentRectangle.yCenter, 30);
+		globalDebugCircle.drawBorder();
+		globalDebugCircles.push(globalDebugCircles);
+		let globalDebugLine = new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRectangle.xCenter, targetRectangle.yCenter, `debugline${customIdIncrement()}`, svgLayer0, "#AAAAAA")
+		globalDebugLine.draw();
+		globalDebugLines.push(globalDebugLine);
+	}
+
+	if (grid[row][targetColumn].getOccupiedBy() == "none") {
+		return { row: row, column: targetColumn };
+	}
+
+	return { row: row, column: column };
+}
 
 class Rectangle {
 	constructor(x, y, width, height, svgLayer = svgLayer0, color = "#8CA8B8", strokeWidth = 4, strokeColor = "#D6CFC7", element = document.createElementNS("http://www.w3.org/2000/svg", "rect")) {
@@ -510,6 +552,13 @@ class Line {
 
 }
 
+/**
+ * @typedef {Object} Stats 
+ * @class Stats
+ * @param {number} hp
+ * @param {number} attack
+ * @param {number} range
+ */
 class Stats {
 	constructor(hp = 100, attack = 25, range = 1) {
 		this.hp = hp;
@@ -629,6 +678,164 @@ class Minion {
 	}
 
 }
+
+class Hero {
+	/**
+	* create a Hero
+	* @field {string} customId
+	* @field {number} direction
+	* @field {number} columnDirection
+	* @field {number} movePriorityModifier 
+	* @field {?number} targetLine
+	* @field {?number} targetRow
+	* @field {number} lineOffset 
+	* @field {number} attackToAbsorb
+	* @param {number} row
+	* @param {number} column
+	* @param {number} baseDirection
+	* @param {string} color
+	* @param {string} team
+	* @param {string} enemyTeam
+	* @param {Stats} stats
+		*/
+	customId = customIdIncrement();
+	direction = 0;
+	columnDirection = 0;
+	movePriorityModifier = 10;
+	targetLine = null;
+	targetRow = null;
+	lineOffset = 0;
+	attackToAbsorb = 0;
+	constructor(row, column, baseDirection, color, team, enemyTeam, stats = new Stats(500, 100, 1)) {
+		this.row = row;
+		this.column = column;
+		this.previousRow = row;
+		this.previousColumn = column;
+		this.baseDirection = baseDirection;
+		this.color = color;
+		this.team = team;
+		this.enemyTeam = enemyTeam;
+		this.stats = stats;
+	}
+
+	/**
+	* @method move by key
+	* @param {string} key
+	* @returns {Point} point
+	*/
+	moveByKey(key) {
+		switch (key) {
+			case "ArrowRight":
+				this.columnDirection = 1;
+				this.direction = 0;
+				break;
+			case "ArrowLeft":
+				this.columnDirection = -1;
+				this.direction = 0;
+				break;
+			case "ArrowUp":
+				this.direction = this.baseDirection;
+				this.columnDirection = 0;
+				break;
+			case "ArrowDown":
+				this.direction = -1 * this.baseDirection;
+				this.columnDirection = 0;
+				break;
+		}
+	}
+
+
+
+
+	/**
+		* @function sets row and column by Point object, sets previousRow and previousColumn
+		* @param {Point} point
+		*/
+	setRowAndColumn(point) {
+		console.error(point);
+		this.previousRow = this.row;
+		this.previousColumn = this.column;
+		this.row = point.row;
+		this.column = point.column;
+		this.columnDirection = 0;
+		this.direction = 0;
+	}
+
+	setMovePriority() {
+		this.movePriority = this.movePriorityModifier + this.row * this.direction;
+	}
+
+	setLineOffset() {
+		this.lineOffset = Math.floor(this.column / 4) * 4;
+	}
+
+	updateState(key) {
+		console.log("Hero updateState");
+		this.moveByKey(key)
+		this.setLineOffset()
+
+		if (this.targetLine != null) {
+			this.targetLine.remove();
+			this.targetLine = null;
+		}
+		this.targetRow = getTargetRow(this.row, this.column, this.baseDirection, this.stats.range, this.lineOffset, this.enemyTeam);
+		if (this.targetRow == null) {
+			if (this.direction != 0) {
+				this.setRowAndColumn(move(this.row, this.column, this.direction, this.team, this.lineOffset));
+			}
+			if (this.columnDirection != 0) {
+				this.setRowAndColumn(moveColumn(this.row, this.column, this.columnDirection));
+			}
+			this.render();
+		}
+		if (this.targetRow != null) {
+			attackTargetRow(this.row, this.column, this.lineOffset, this.targetRow, this.customId, this.stats.attack, this.enemyTeam);
+		}
+
+		this.setMovePriority();
+	}
+
+	absorbAttack() {
+		this.stats.hp = this.stats.hp - this.attackToAbsorb;
+		console.log("Hero absorbed attack", this.attackToAbsorb);
+		this.attackToAbsorb = 0;
+		if (this.stats.hp <= 0) {
+			this.clear();
+			return null;
+		}
+		this.render();
+	}
+
+	render(color = this.color, text = `hp:${this.stats.hp} `) {
+		if (this.targetRow != null) {
+			grid[this.row][this.column].clearText();
+			grid[this.row][this.column].addText(text);
+			return null;
+		}
+		grid[this.previousRow][this.previousColumn].clear();
+		grid[this.previousRow][this.previousColumn].removeCustomId();
+		if (this.targetLine != null) {
+			this.targetLine.remove();
+			this.targetLine = null;
+		}
+		grid[this.row][this.column].draw(color);
+		grid[this.row][this.column].addCustomId(this.customId);
+		grid[this.row][this.column].clearText();
+		grid[this.row][this.column].addText(text);
+	}
+
+	clear() {
+		grid[this.row][this.column].clear();
+		grid[this.row][this.column].removeCustomId();
+		grid[this.row][this.column].clearText();
+		if (this.targetLine != null) {
+			this.targetLine.remove();
+			this.targetLine = null;
+		}
+	}
+
+}
+
 
 class Tower {
 	targetRow = null;
@@ -765,13 +972,8 @@ let teamRedData = new TeamData(TEAM_RED_MINION_COLOR, TEAM_RED_TOWER_COLOR, 1, 1
 let teamBlueData = new TeamData(TEAM_BLUE_MINION_COLOR, TEAM_BLUE_TOWER_COLOR, -1, grid.length - 1 - 1, grid.length - 1 - 0, TEAM_BLUE, TEAM_RED);
 
 let teamRed = new Team(teamRedData)
-teamRed.spawnMinions(1);
 
 let teamBlue = new Team(teamBlueData)
-
-teamBlue.spawnMinionsByRow(3, 2);
-teamBlue.spawnMinionsByRow(4, 3);
-
 const lines = [];
 const amountOfLines = 3;
 const lineWidthByRectangleCount = 3;
@@ -784,18 +986,29 @@ for (let i = 0; i < amountOfLines; i++) {
 	lines.push(new Line(gridPart, i * 4, lineWidthByRectangleCount));
 }
 
+if (SPAWN == true) {
+	teamRed.spawnMinions(1);
+	teamBlue.spawnMinionsByRow(3, 2);
+	teamBlue.spawnMinionsByRow(4, 3);
+	var hero = new Hero(5, 2, -1, TEAM_BLUE_HERO_COLOR, TEAM_BLUE, TEAM_RED);
+	hero.render();
 
-lines[1].spawnMinionsByTeam(teamRed);
+	lines[1].spawnMinionsByTeam(teamRed);
+	lines[2].spawnMinionsByTeam(teamRed);
+	lines[2].spawnMinionsByTeam(teamBlue);
 
-
-
-lines[2].spawnMinionsByTeam(teamRed);
-lines[2].spawnMinionsByTeam(teamBlue);
-
-for (let line of lines) {
-	line.spawnTowerByTeam(teamRed);
-	line.spawnTowerByTeam(teamBlue);
+	for (let line of lines) {
+		line.spawnTowerByTeam(teamRed);
+		line.spawnTowerByTeam(teamBlue);
+	}
 }
+else {
+	var hero = new Hero(5, 2, -1, TEAM_BLUE_HERO_COLOR, TEAM_BLUE, TEAM_RED);
+	hero.render();
+	teamRed.spawnMinionsByRow(3, 2);
+}
+
+
 
 
 //const tower = grid[1][6]
@@ -824,6 +1037,24 @@ function processUserInput() {
 	let aPressedCounter = keysPressed.filter((key) => key == "a");
 	if (aPressedCounter.length > 0) {
 	}
+
+	let arrowLeftCounter = keysPressed.filter((key) => key == "ArrowLeft");
+	if (arrowLeftCounter.length > 0) {
+		return "ArrowLeft";
+	}
+
+	let arrowRightCounter = keysPressed.filter((key) => key == "ArrowRight");
+	if (arrowRightCounter.length > 0) {
+		return "ArrowRight";
+	}
+	let arrowUpCounter = keysPressed.filter((key) => key == "ArrowUp");
+	if (arrowUpCounter.length > 0) {
+		return "ArrowUp";
+	}
+	let arrowDownCounter = keysPressed.filter((key) => key == "ArrowDown");
+	if (arrowDownCounter.length > 0) {
+		return "ArrowDown";
+	}
 }
 
 
@@ -834,16 +1065,17 @@ for (let t of globalTowers) {
 	t.render();
 }
 
-function updateState() {
+function updateState(key) {
 	removeDeadMinions();
+	removeDeadTowers();
 	globalMinions.sort((a, b) => b.movePriority - a.movePriority);
 	globalAllAttackableObjects = [];
-	globalAllAttackableObjects.push(...globalMinions, ...globalTowers)
+	globalAllAttackableObjects.push(...globalMinions, ...globalTowers, hero);
 
 	console.table(globalMinions);
 
 	for (let o of globalAllAttackableObjects) {
-		o.updateState();
+		o.updateState(key);
 	}
 
 	for (let o of globalAllAttackableObjects) {
@@ -861,8 +1093,8 @@ function render() {
 
 }
 function gameLoop() {
-	processUserInput();
-	updateState();
+	let key = processUserInput();
+	updateState(key);
 }
 
 const help = document.getElementById("help");
