@@ -121,9 +121,9 @@ function getTargetRow(row, column, direction, range, lineOffset, enemyTeam) {
 			let globalDebugLine = new TargetLine(currentRectangle.xCenter, currentRectangle.yCenter, targetRowRectangleEnd.xCenter, targetRowRectangleEnd.yCenter, `debugline${customIdIncrement()}`, svgLayer0, "#BC8F8F")
 			globalDebugLine.draw();
 
-			//globalDebugCircle.remove();
-			//globalDebugLineRow.remove();
-			//globalDebugLine.remove();
+			globalDebugCircle.remove();
+			globalDebugLineRow.remove();
+			globalDebugLine.remove();
 		}
 
 		for (let col of enemiesColumns) {
@@ -276,7 +276,6 @@ function move(row, column, direction, team, lineOffset) {
 	* @param {number} row
 	* @param {number} column
 	* @param {number} columnDirection
-
 	* @returns {Point} point
 	*/
 function moveColumn(row, column, columnDirection) {
