@@ -306,6 +306,18 @@ function moveColumn(row, column, columnDirection) {
 	return { row: row, column: column };
 }
 
+/**
+ * @typedef {Object} Rectangle 
+ * @class Rectangle
+ * @param {number} x
+ * @param {number} y
+ * @param {number} width
+ * @param {number} height
+ * @param {HTMLElement} svgLayer
+ * @param {number} strokeWidth
+ * @param {string} strokeColor
+ * @param {HTMLElement} element
+ */
 class Rectangle {
 	constructor(x, y, width, height, svgLayer = svgLayer0, color = "#8CA8B8", strokeWidth = 4, strokeColor = "#D6CFC7", element = document.createElementNS("http://www.w3.org/2000/svg", "rect")) {
 		this.svgLayer = svgLayer;
@@ -376,21 +388,29 @@ class Rectangle {
 		this.clearText();
 	}
 
+	/**
+	 * @function addText
+	 * @param {string} text Space separated text to be shown with break lines
+	 */
 	addText(text) {
-		let textElement = document.createElementNS("http://www.w3.org/2000/svg", "text");
-		textElement.id = `text - ${this.x}${this.y} `;
-		textElement.setAttribute("x", this.x + 20);
-		textElement.setAttribute("y", this.y + 20);
-		textElement.style.fontSize = 15;
-		textElement.style.fontWeight = 400;
-		textElement.innerHTML = text;
-		this.svgLayer.appendChild(textElement);
+		let splittedText = text.split(" ");
+		for (let [i, t] of splittedText.entries()) {
+			let textElement = document.createElementNS("http://www.w3.org/2000/svg", "text");
+			textElement.id = `text-${this.x}${this.y} ${i}`;
+			textElement.setAttribute("x", this.x + 5);
+			textElement.setAttribute("y", this.y + 15);
+			textElement.setAttribute("dy", i * 15);
+			textElement.style.fontSize = 15;
+			textElement.style.fontWeight = 400;
+			textElement.innerHTML = t;
+			this.svgLayer.appendChild(textElement);
+		}
 	}
-	clearText() {
-		let text = document.getElementById(`text - ${this.x}${this.y} `);
-		if (text != null) {
-			this.svgLayer.removeChild(text);
 
+	clearText() {
+		let text = document.querySelectorAll(`[id^="text-${this.x}${this.y}"]`);
+		for (let t of text) {
+			this.svgLayer.removeChild(t);
 		}
 	}
 }
@@ -649,7 +669,7 @@ class Minion {
 		this.setMovePriority();
 	}
 
-	render(color = this.color, text = `hp:${this.stats.hp} `) {
+	render(color = this.color, text = `hp:${this.stats.hp} mHp:${this.maxHp} att:${this.stats.attack} tR:${this.targetRow}`) {
 		if (this.targetRow != null) {
 			grid[this.row][this.column].clearText();
 			grid[this.row][this.column].addText(text);
@@ -716,6 +736,7 @@ class Hero {
 		this.team = team;
 		this.enemyTeam = enemyTeam;
 		this.stats = stats;
+		this.maxHp = this.stats.hp;
 	}
 
 	/**
@@ -806,7 +827,7 @@ class Hero {
 		this.render();
 	}
 
-	render(color = this.color, text = `hp:${this.stats.hp} `) {
+	render(color = this.color, text = `hp:${this.stats.hp} mHp:${this.maxHp} att:${this.stats.attack} tR:${this.targetRow}`) {
 		if (this.targetRow != null) {
 			grid[this.row][this.column].clearText();
 			grid[this.row][this.column].addText(text);
@@ -852,6 +873,7 @@ class Tower {
 		this.color = color;
 		this.lineOffset = this.column - 1;
 		this.stats = stats;
+		this.maxHp = this.stats.hp;
 	}
 
 	absorbAttack() {
@@ -877,7 +899,7 @@ class Tower {
 		}
 	}
 
-	render(text = `hp:${this.stats.hp} `) {
+	render(text = `hp:${this.stats.hp} mHp:${this.maxHp} att:${this.stats.attack} tR:${this.targetRow}`) {
 		if (this.targetRow != null) {
 			grid[this.row][this.column].clearText();
 			grid[this.row][this.column].addText(text);
@@ -945,6 +967,8 @@ const arenaWidth = 800;
 const arenaHeight = 600;
 const gridRowCount = 8;
 const gridColCount = 12;
+/** @type {Array.<Rectangle[]>}
+ */
 const grid = [];
 const gridRectangleWidth = arenaWidth / gridColCount;
 console.log({ gridRectangleWidth })
